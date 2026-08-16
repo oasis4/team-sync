@@ -95,7 +95,7 @@ Wer lieber das installierte Plugin nutzt: Es liegt unter
 
 ### Voraussetzungen
 
-- Python 3.8 oder neuer, als `python3` aufrufbar
+- Python 3.9 oder neuer, als `python3` aufrufbar
 - git 2.5 oder neuer
 - Ein gemeinsames Remote, auf das alle pushen dürfen
 

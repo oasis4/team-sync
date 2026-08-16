@@ -138,6 +138,36 @@ class TestSkripte(unittest.TestCase):
             except py_compile.PyCompileError as fehler:
                 self.fail(f"{pfad.name}: {fehler}")
 
+    def test_keine_zu_neue_standardbibliothek(self):
+        """
+        Im Team laufen unterschiedliche Python-Versionen. Path.write_text
+        mit newline= gibt es erst ab 3.10 und ist beim Setup unter 3.9
+        mit einem TypeError ausgestiegen, obwohl es hier unter 3.13
+        durchlief. Dafür gibt es write_text_lf in lib/channel.py.
+        """
+        verboten = (
+            (r"write_text\([^)]*newline", "Path.write_text(newline=) braucht 3.10"),
+            (r"\bremoveprefix\(|\bremovesuffix\(", "str.removeprefix braucht 3.9"),
+            (r"zip\([^)]*strict=", "zip(strict=) braucht 3.10"),
+        )
+        for pfad in sorted((WURZEL / "scripts").rglob("*.py")):
+            text = pfad.read_text(encoding="utf-8")
+            # Die eigene Hilfsfunktion darf open(newline=) verwenden.
+            text = text.replace('open(str(path), "w", encoding="utf-8", newline="\\n")', "")
+            for muster, grund in verboten:
+                treffer = re.search(muster, text)
+                self.assertIsNone(treffer, f"{pfad.name}: {grund}")
+
+    def test_mindestversion_ist_dokumentiert(self):
+        readme = (WURZEL / "README.md").read_text(encoding="utf-8")
+        ci = (WURZEL / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        version = re.search(r"Python (\d+\.\d+) oder neuer", readme)
+        self.assertIsNotNone(version, "README nennt keine Mindestversion")
+        self.assertIn(
+            f'"{version.group(1)}"', ci,
+            "Die im README genannte Mindestversion wird von der CI nicht getestet",
+        )
+
     def test_keine_externen_abhaengigkeiten(self):
         """
         Das Plugin muss ohne pip install laufen. Ein versehentlicher

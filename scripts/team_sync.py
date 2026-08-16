@@ -53,6 +53,7 @@ from lib.channel import (
     slugify,
     touch_throttle,
     write_and_push,
+    write_text_lf,
 )
 from lib.transcript import summarize
 
@@ -266,7 +267,7 @@ def cmd_answer(args) -> int:
         )
 
         try:
-            pfad.write_text(frontmatter.build(felder, rumpf), encoding="utf-8", newline="\n")
+            write_text_lf(pfad, frontmatter.build(felder, rumpf))
         except Exception as exc:
             fehler(f"Antwort konnte nicht geschrieben werden: {exc}")
             return EXIT_FEHLER

@@ -28,7 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from lib.channel import CHANNEL_BRANCH, SUBDIRS, run_git, setup_stdio
+from lib.channel import CHANNEL_BRANCH, SUBDIRS, run_git, setup_stdio, write_text_lf
 
 README_CHANNEL = """# Team-Channel
 
@@ -128,15 +128,13 @@ def fuelle_struktur(channel_dir: Path):
         # Git speichert keine leeren Ordner, deshalb je eine Platzhalterdatei.
         (ziel / ".gitkeep").write_text("", encoding="utf-8")
 
-    (channel_dir / "README.md").write_text(README_CHANNEL, encoding="utf-8", newline="\n")
+    write_text_lf(channel_dir / "README.md", README_CHANNEL)
 
     # Die Skripte legen ihre Sperrdatei im Git-Verzeichnis ab. Der
     # Eintrag hier ist die zweite Sicherung: Nichts, was nur den
     # laufenden Prozess betrifft, darf je in den geteilten Branch
     # geraten, sonst streiten sich zwei Rechner um dieselbe Datei.
-    (channel_dir / ".gitignore").write_text(
-        "team-sync.lock\n.team-sync.lock\n", encoding="utf-8", newline="\n"
-    )
+    write_text_lf(channel_dir / ".gitignore", "team-sync.lock\n.team-sync.lock\n")
 
 
 def main() -> int:

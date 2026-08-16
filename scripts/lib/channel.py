@@ -431,12 +431,29 @@ def write_and_push(channel_dir: Path, rel_path: str, content: str, message: str)
         target = channel_dir / rel_path
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content, encoding="utf-8", newline="\n")
+            write_text_lf(target, content)
         except Exception as exc:
             eprint(f"team-sync: {rel_path} konnte nicht geschrieben werden: {exc}")
             return False
 
         return push_channel(channel_dir, message)
+
+
+def write_text_lf(path: Path, content: str):
+    """
+    Schreibt eine Datei als UTF-8 mit Unix-Zeilenenden.
+
+    Nicht über die gleichnamige Methode von Path mit dem Argument für
+    Zeilenenden: die kennt es erst ab Python 3.10. Im Team laufen
+    verschiedene Python-Versionen, und unter 3.9 stieg das Setup damit
+    mit einem TypeError aus.
+
+    Feste Zeilenenden sind hier wichtig, weil derselbe Channel von
+    Windows- und Linux-Rechnern beschrieben wird. Ohne sie zeigt jeder
+    Wechsel die ganze Datei als geändert an.
+    """
+    with open(str(path), "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(content)
 
 
 def list_files_sorted(folder: Path):

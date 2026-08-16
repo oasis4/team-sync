@@ -30,6 +30,11 @@ mehrere Fehler, die im Alltag zu dritt aufgefallen wären.
 - **Das Setup scheiterte mit git vor 2.42.** `git worktree add --orphan`
   gibt es erst ab dieser Version. Der verwaiste Branch entsteht jetzt
   über `commit-tree`, was seit Jahren unverändert funktioniert.
+- **Das Setup scheiterte unter Python 3.9.** Das Argument für
+  Zeilenenden in `Path.write_text` gibt es erst ab 3.10. Alle Dateien
+  laufen jetzt über eine gemeinsame Schreibfunktion. Aufgefallen ist es
+  erst in der CI, weil hier 3.13 lief — im Team laufen aber
+  unterschiedliche Versionen.
 
 ### Neu
 

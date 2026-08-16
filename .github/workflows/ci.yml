@@ -1,0 +1,63 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Das Plugin läuft auf den Rechnern des Teams, nicht auf einem
+        # Server. Getestet wird deshalb auf allen drei Systemen, und
+        # unter Windows besonders: Pfade, Zeilenenden und die
+        # Konsolenkodierung verhalten sich dort anders.
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.9", "3.13"]
+        exclude:
+          - os: macos-latest
+            python: "3.9"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: git für die Tests konfigurieren
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@example.test"
+          git config --global init.defaultBranch main
+
+      - name: Tests
+        run: python -m unittest discover -s tests -t tests -v
+
+  pruefen:
+    name: Struktur und JSON
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: JSON-Dateien prüfen
+        run: |
+          for datei in .claude-plugin/plugin.json .claude-plugin/marketplace.json hooks/hooks.json; do
+            echo "prüfe $datei"
+            python -m json.tool "$datei" > /dev/null
+          done
+
+      - name: Plugin-Struktur prüfen
+        run: python -m unittest discover -s tests -t tests -k TestManifeste -k TestHooks -k TestCommands -v
+
+      - name: Syntax aller Skripte
+        run: python -m compileall -q scripts tests

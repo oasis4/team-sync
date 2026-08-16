@@ -1,0 +1,19 @@
+{
+  "name": "team-sync",
+  "displayName": "Team Sync",
+  "version": "0.2.0",
+  "description": "Teilt Status, offene Fragen und Architekturentscheidungen zwischen parallelen Claude-Code-Sessions am selben Repository. Über einen eigenen Git-Branch, ohne zentralen Server.",
+  "author": {
+    "name": "Finn Andresen"
+  },
+  "homepage": "https://github.com/oasis4/team-sync",
+  "repository": "https://github.com/oasis4/team-sync",
+  "license": "MIT",
+  "keywords": [
+    "team",
+    "kontext",
+    "gedaechtnis",
+    "git",
+    "zusammenarbeit"
+  ]
+}

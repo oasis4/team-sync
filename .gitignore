@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# team-sync zur Laufzeit
+team-sync.lock
+.team-sync.lock
+
+# Editoren und Betriebssysteme
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Sitzungsdaten lokaler Werkzeuge
+.remember/

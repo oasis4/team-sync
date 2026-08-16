@@ -1,0 +1,185 @@
+"""
+Prüft die Plugin-Struktur selbst.
+
+Diese Fehler tun besonders weh, weil sie nicht knallen: Ein Plugin mit
+einem falschen Namen in einer der beiden JSON-Dateien installiert sich
+scheinbar, nur passiert danach nichts. Ein Hook, der auf ein
+umbenanntes Skript zeigt, schweigt einfach. Deshalb hier geprüft statt
+im Alltag entdeckt.
+"""
+
+import json
+import re
+import unittest
+from pathlib import Path
+
+WURZEL = Path(__file__).resolve().parent.parent
+HOOK_EREIGNISSE = {"SessionStart", "Stop", "SessionEnd"}
+
+
+def lies_json(pfad: Path):
+    return json.loads(pfad.read_text(encoding="utf-8"))
+
+
+class TestManifeste(unittest.TestCase):
+    def setUp(self):
+        self.plugin = lies_json(WURZEL / ".claude-plugin" / "plugin.json")
+        self.marketplace = lies_json(WURZEL / ".claude-plugin" / "marketplace.json")
+
+    def test_name_ist_ueberall_gleich(self):
+        """
+        Der Name muss in plugin.json, marketplace.json und im
+        Repositoriumsnamen übereinstimmen, sonst findet
+        '/plugin install' das Plugin nicht.
+        """
+        eintraege = self.marketplace["plugins"]
+        namen = {eintrag["name"] for eintrag in eintraege}
+        self.assertIn(self.plugin["name"], namen)
+        self.assertEqual(self.plugin["name"], WURZEL.name)
+
+    def test_version_ist_semver(self):
+        self.assertRegex(self.plugin["version"], r"^\d+\.\d+\.\d+$")
+
+    def test_version_steht_im_changelog(self):
+        changelog = (WURZEL / "CHANGELOG.md").read_text(encoding="utf-8")
+        self.assertIn(f"[{self.plugin['version']}]", changelog)
+
+    def test_pflichtfelder(self):
+        for feld in ("name", "version", "description", "license"):
+            self.assertIn(feld, self.plugin, f"plugin.json fehlt: {feld}")
+
+    def test_quelle_im_marketplace_existiert(self):
+        for eintrag in self.marketplace["plugins"]:
+            quelle = eintrag["source"]
+            self.assertTrue(quelle.startswith("./"), f"Pfad muss relativ sein: {quelle}")
+            self.assertTrue((WURZEL / quelle).is_dir())
+
+
+class TestHooks(unittest.TestCase):
+    def setUp(self):
+        self.hooks = lies_json(WURZEL / "hooks" / "hooks.json")["hooks"]
+
+    def test_erwartete_ereignisse(self):
+        self.assertEqual(set(self.hooks), HOOK_EREIGNISSE)
+
+    def test_verwiesene_skripte_existieren(self):
+        for ereignis, gruppen in self.hooks.items():
+            for gruppe in gruppen:
+                for hook in gruppe["hooks"]:
+                    befehl = hook["command"]
+                    treffer = re.search(r"scripts/([\w_]+\.py)", befehl)
+                    self.assertIsNotNone(treffer, f"{ereignis}: {befehl}")
+                    skript = WURZEL / "scripts" / treffer.group(1)
+                    self.assertTrue(skript.is_file(), f"{ereignis} zeigt auf {skript}")
+
+    def test_pluginwurzel_wird_verwendet(self):
+        """
+        Ein Hook darf keinen absoluten Pfad enthalten. Er läuft auf dem
+        Rechner jedes Teammitglieds, und dort liegt das Plugin woanders.
+        """
+        for gruppen in self.hooks.values():
+            for gruppe in gruppen:
+                for hook in gruppe["hooks"]:
+                    self.assertIn("${CLAUDE_PLUGIN_ROOT}", hook["command"])
+
+    def test_timeouts_gesetzt(self):
+        for ereignis, gruppen in self.hooks.items():
+            for gruppe in gruppen:
+                for hook in gruppe["hooks"]:
+                    self.assertIn("timeout", hook, f"{ereignis} ohne Timeout")
+                    self.assertLessEqual(hook["timeout"], 60)
+
+
+class TestCommands(unittest.TestCase):
+    def setUp(self):
+        self.dateien = sorted((WURZEL / "commands").glob("*.md"))
+
+    def test_commands_vorhanden(self):
+        namen = {pfad.stem for pfad in self.dateien}
+        self.assertEqual(namen, {"ask", "answer", "decide", "sync", "team"})
+
+    def test_frontmatter_vollstaendig(self):
+        for pfad in self.dateien:
+            text = pfad.read_text(encoding="utf-8")
+            self.assertTrue(text.startswith("---\n"), f"{pfad.name} ohne Frontmatter")
+            kopf = text.split("---", 2)[1]
+            self.assertIn("description:", kopf, f"{pfad.name} ohne description")
+            self.assertIn("name:", kopf, f"{pfad.name} ohne name")
+
+    def test_name_passt_zum_dateinamen(self):
+        for pfad in self.dateien:
+            kopf = pfad.read_text(encoding="utf-8").split("---", 2)[1]
+            treffer = re.search(r"^name:\s*(\S+)", kopf, re.MULTILINE)
+            self.assertEqual(treffer.group(1), pfad.stem)
+
+    def test_commands_rufen_die_kommandozeile_auf(self):
+        """
+        Ein Command, der wieder anfängt, git-Befehle zu beschreiben,
+        gehört ins Skript. Nur /team und /answer dürfen lesen, ohne zu
+        schreiben, aber auch sie gehen über team_sync.py.
+        """
+        for pfad in self.dateien:
+            text = pfad.read_text(encoding="utf-8")
+            self.assertIn("team_sync.py", text, f"{pfad.name} ruft die CLI nicht auf")
+            self.assertNotIn(
+                "git commit",
+                text,
+                f"{pfad.name} beschreibt git-Aufrufe, die ins Skript gehören",
+            )
+
+
+class TestSkripte(unittest.TestCase):
+    def test_alle_skripte_uebersetzen(self):
+        import py_compile
+
+        for pfad in sorted((WURZEL / "scripts").rglob("*.py")):
+            try:
+                py_compile.compile(str(pfad), doraise=True, cfile=None)
+            except py_compile.PyCompileError as fehler:
+                self.fail(f"{pfad.name}: {fehler}")
+
+    def test_keine_externen_abhaengigkeiten(self):
+        """
+        Das Plugin muss ohne pip install laufen. Ein versehentlicher
+        Import von requests oder yaml würde es auf einem fremden
+        Rechner stillschweigend lahmlegen.
+        """
+        erlaubt = {
+            "argparse", "json", "os", "re", "subprocess", "sys", "time",
+            "unicodedata", "datetime", "pathlib", "lib", "collections",
+            "shutil", "tempfile", "textwrap", "typing", "py_compile",
+        }
+        muster = re.compile(r"^\s*(?:from|import)\s+([a-zA-Z_][\w]*)", re.MULTILINE)
+
+        for pfad in sorted((WURZEL / "scripts").rglob("*.py")):
+            text = pfad.read_text(encoding="utf-8")
+            for modul in muster.findall(text):
+                if modul.startswith("."):
+                    continue
+                self.assertIn(
+                    modul, erlaubt,
+                    f"{pfad.name} importiert '{modul}', das nicht zur "
+                    f"Standardbibliothek gehört oder hier nicht vorgesehen ist",
+                )
+
+
+class TestDokumentation(unittest.TestCase):
+    def test_dateien_vorhanden(self):
+        for name in ("README.md", "LICENSE", "CONTRIBUTING.md", "CHANGELOG.md",
+                     ".gitignore"):
+            self.assertTrue((WURZEL / name).is_file(), f"{name} fehlt")
+
+    def test_readme_nennt_alle_commands(self):
+        readme = (WURZEL / "README.md").read_text(encoding="utf-8")
+        for pfad in (WURZEL / "commands").glob("*.md"):
+            self.assertIn(f"/{pfad.stem}", readme, f"README nennt /{pfad.stem} nicht")
+
+    def test_readme_nennt_die_einstellungen(self):
+        readme = (WURZEL / "README.md").read_text(encoding="utf-8")
+        quelle = (WURZEL / "scripts" / "lib" / "channel.py").read_text(encoding="utf-8")
+        for variable in re.findall(r'environ\.get\("(TEAM_[A-Z_]+)"', quelle):
+            self.assertIn(variable, readme, f"README erklärt {variable} nicht")
+
+
+if __name__ == "__main__":
+    unittest.main()

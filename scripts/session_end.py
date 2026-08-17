@@ -13,8 +13,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from lib import reservierung
 from lib.autostatus import schreibe_status
-from lib.channel import get_project_dir, setup_stdio, touch_throttle
+from lib.channel import (
+    channel_is_ready,
+    get_agent_name,
+    get_channel_dir,
+    get_current_branch,
+    get_project_dir,
+    setup_stdio,
+    touch_throttle,
+)
 
 # Gründe, bei denen die Arbeit weiterläuft und nur der Kontext wechselt.
 WEICHE_GRUENDE = {"clear", "compact", "resume"}
@@ -41,8 +50,23 @@ def main():
             quelle="sessionende",
             anlass=anlass,
         )
+
+        project_dir = get_project_dir()
         if geschrieben:
-            touch_throttle(get_project_dir())
+            touch_throttle(project_dir)
+
+        # Reservierungen aufheben. Ohne das hält eine beendete Session
+        # ihre Dateien bis zum Ablauf besetzt, und die anderen bekommen
+        # stundenlang Warnungen vor jemandem, der längst Feierabend hat.
+        channel_dir = get_channel_dir(project_dir)
+        if channel_is_ready(channel_dir):
+            reservierung.freigeben(
+                channel_dir,
+                get_agent_name(project_dir),
+                get_current_branch(project_dir),
+                hook_input.get("session_id", ""),
+                None,
+            )
     except Exception as exc:
         print(f"team-sync: Abschlussstatus fehlgeschlagen: {exc}", file=sys.stderr)
 

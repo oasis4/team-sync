@@ -19,7 +19,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from lib import empfang
 from lib.channel import (
+    cache_verwerfen,
     channel_is_ready,
     get_agent_name,
     get_channel_dir,
@@ -45,6 +47,10 @@ def main():
 
     try:
         project_dir = get_project_dir()
+        # Beim Sessionstart neu ermitteln: Wurde der Channel seit dem
+        # letzten Mal eingerichtet, zeigt ein alter Cache noch auf einen
+        # Ort, an dem nichts lag.
+        cache_verwerfen(project_dir)
         channel_dir = get_channel_dir(project_dir)
 
         if not channel_is_ready(channel_dir):
@@ -53,7 +59,13 @@ def main():
             return
 
         pull_channel(channel_dir, timeout=PULL_TIMEOUT)
-        kontext = build_context(channel_dir, get_agent_name(project_dir))
+        me = get_agent_name(project_dir)
+        kontext = build_context(channel_dir, me)
+
+        # Der Rückkanal soll später nur Neues melden. Alles, was gerade
+        # im Startkontext steht, gilt deshalb ab jetzt als gesehen —
+        # sonst wiederholt die erste Meldung, was oben schon steht.
+        empfang.erstlauf_stumm_schalten(channel_dir, project_dir, me)
     except Exception as exc:
         print(f"team-sync: Kontext konnte nicht gelesen werden: {exc}", file=sys.stderr)
         return

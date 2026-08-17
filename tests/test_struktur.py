@@ -14,7 +14,14 @@ import unittest
 from pathlib import Path
 
 WURZEL = Path(__file__).resolve().parent.parent
-HOOK_EREIGNISSE = {"SessionStart", "Stop", "SessionEnd"}
+HOOK_EREIGNISSE = {
+    "SessionStart", "Stop", "SessionEnd", "PreToolUse", "PostToolUse",
+}
+
+# Hooks, die vor bzw. nach jedem einzelnen Werkzeugaufruf laufen und
+# deshalb einen Filter brauchen. Ohne matcher liefen sie auch bei jedem
+# Read und jedem Bash-Aufruf mit.
+BRAUCHEN_MATCHER = {"PreToolUse", "PostToolUse"}
 
 
 def lies_json(pfad: Path):
@@ -81,6 +88,12 @@ class TestHooks(unittest.TestCase):
             for gruppe in gruppen:
                 for hook in gruppe["hooks"]:
                     self.assertIn("${CLAUDE_PLUGIN_ROOT}", hook["command"])
+
+    def test_werkzeug_hooks_haben_matcher(self):
+        for ereignis in BRAUCHEN_MATCHER:
+            for gruppe in self.hooks[ereignis]:
+                self.assertIn("matcher", gruppe, f"{ereignis} ohne matcher")
+                self.assertIn("Edit", gruppe["matcher"])
 
     def test_timeouts_gesetzt(self):
         for ereignis, gruppen in self.hooks.items():
@@ -205,10 +218,20 @@ class TestDokumentation(unittest.TestCase):
             self.assertIn(f"/{pfad.stem}", readme, f"README nennt /{pfad.stem} nicht")
 
     def test_readme_nennt_die_einstellungen(self):
+        """
+        Eine Stellschraube, die niemand kennt, ist keine Stellschraube.
+        Geprüft wird über alle Module, nicht nur über channel.py.
+        """
         readme = (WURZEL / "README.md").read_text(encoding="utf-8")
-        quelle = (WURZEL / "scripts" / "lib" / "channel.py").read_text(encoding="utf-8")
-        for variable in re.findall(r'environ\.get\("(TEAM_[A-Z_]+)"', quelle):
-            self.assertIn(variable, readme, f"README erklärt {variable} nicht")
+        for pfad in sorted((WURZEL / "scripts").rglob("*.py")):
+            quelle = pfad.read_text(encoding="utf-8")
+            for variable in re.findall(r'environ\.get\(\s*"(TEAM_[A-Z_]+)"', quelle):
+                # assertTrue statt assertIn: Sonst kippt unittest bei
+                # einem Fehlschlag die komplette README in die Ausgabe.
+                self.assertTrue(
+                    variable in readme,
+                    f"README erklärt {variable} nicht (aus {pfad.name})",
+                )
 
 
 if __name__ == "__main__":

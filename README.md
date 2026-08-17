@@ -27,28 +27,61 @@ projekte/
 └── mein-projekt-channel/   ← Branch team-channel, vom Plugin gepflegt
     ├── status/             eine Datei pro Person
     ├── questions/          eine Datei pro Frage
-    └── decisions/          eine Datei pro Entscheidung
+    ├── decisions/          eine Datei pro Entscheidung
+    └── reservierungen/     wer sitzt gerade an welcher Datei
 ```
 
 Beim **Sessionstart** liest ein Hook den Channel und gibt drei Dinge in
 die Session: offene Fragen an dich, woran die anderen zuletzt gearbeitet
 haben, und die zuletzt getroffenen Entscheidungen.
 
-**Währenddessen** schreibt ein Hook nach jeder Antwort gedrosselt einen
-Zwischenstand — höchstens alle zehn Minuten, sonst gäbe es einen Commit
-pro Nachricht. Beim **Sessionende** wird ein letzter Stand geschrieben.
+**Währenddessen** passieren drei Dinge automatisch:
+
+- **Vor jedem Edit** wird geprüft, ob gerade jemand anders an derselben
+  Datei sitzt. Wenn ja, gibt es einen Hinweis — blockiert wird nie.
+- **Beim ersten Zugriff** auf eine Datei wird sie für dich reserviert, damit
+  die anderen dasselbe sehen.
+- **Alle paar Minuten** meldet das Plugin, was im Channel neu dazugekommen
+  ist: beantwortete Anfragen, neue Fragen an dich, neue Festlegungen.
+
+Beim **Sessionende** wird ein letzter Stand geschrieben und alle deine
+Reservierungen werden freigegeben.
 
 Jede Person, jede Frage und jede Entscheidung ist eine eigene Datei.
 Dadurch entstehen praktisch nie Merge-Konflikte, auch wenn drei Leute
 gleichzeitig pushen.
 
-### Warum der Zwischenstand nötig ist
+### Warum das während der Session passieren muss
 
 `SessionEnd` feuert erst, wenn eine Session wirklich endet. Wer morgens
-eine Session öffnet und sie bis abends offenlässt, stünde im Channel den
-ganzen Tag mit dem Stand von gestern. Für ein Werkzeug, das zeigen soll,
-wer gerade woran sitzt, wäre genau das der entscheidende Fehler — deshalb
-der zusätzliche, gedrosselte `Stop`-Hook.
+eine Session öffnet und bis mittags durcharbeitet, stünde im Channel den
+ganzen Vormittag mit dem Stand von gestern — und würde von den anderen in
+dieser Zeit nichts erfahren.
+
+Bei langen, autonom laufenden Sessions ist der Empfänger einer Meldung
+ohnehin nicht der Mensch vor dem Bildschirm, sondern Claude selbst. Genau
+deshalb sind die Meldungen als Handlungsanweisungen formuliert und nicht
+als Rückfragen: Es ist niemand da, der antworten könnte.
+
+### Was passiert, wenn eine Datei belegt ist
+
+Warten kostet genau die Zeit, die das Werkzeug sparen soll. Deshalb wartet
+niemand:
+
+```
+14:32  Session A fasst auth.py an → Reservierung
+14:51  Session B will an dieselbe Datei
+       → Hinweis, B legt eine Anfrage ab und macht mit etwas anderem weiter
+14:53  A sieht die Anfrage und antwortet: "Ich bin nur in verify_token"
+14:56  B sieht die Antwort und arbeitet an der richtigen Stelle weiter
+```
+
+Bleibt eine Antwort aus — weil die andere Session längst geschlossen ist —
+gilt die Datei nach zehn Minuten als frei.
+
+Reservierungen auf **verschiedenen Branches** ergeben nur einen knappen
+Hinweis. Dort löst git den Konflikt später ohnehin, und eine Warnung, die
+zu oft danebenliegt, wird nach dem dritten Mal überlesen.
 
 ---
 
@@ -117,6 +150,17 @@ Zeilen in [hooks/hooks.json](hooks/hooks.json) entsprechend an.
 | `/decide JWT statt Server-Session` | Entscheidung mit Begründung protokollieren |
 | `/sync` | Sofort einen selbst formulierten Stand pushen |
 
+Reservierungen laufen ohne Zutun. Wer sie von Hand ansehen oder aufheben
+will:
+
+```bash
+python3 ~/werkzeuge/team-sync/scripts/team_sync.py reservierungen
+```
+
+```bash
+python3 ~/werkzeuge/team-sync/scripts/team_sync.py freigeben --alle
+```
+
 Der Unterschied zwischen `/sync` und dem automatischen Zwischenstand ist
 der Punkt: Das Hintergrundskript kennt nur die letzte Nachricht und die
 Liste angefasster Dateien. Bei `/sync` schreibt Claude die
@@ -138,22 +182,43 @@ Alles optional, per Umgebungsvariable:
 |---|---|---|
 | `TEAM_AGENT_NAME` | `git config user.name` | Eigener Name im Channel |
 | `TEAM_SYNC_CHECKPOINT_SECONDS` | `600` | Abstand der automatischen Zwischenstände |
+| `TEAM_SYNC_EMPFANG_SECONDS` | `120` | Wie oft nach Neuem im Channel gesehen wird |
+| `TEAM_SYNC_RESERVIERUNG_STUNDEN` | `4` | Wie lange eine Reservierung gilt |
+| `TEAM_SYNC_ANFRAGE_TIMEOUT` | `10` | Minuten, bis eine unbeantwortete Anfrage aufgegeben wird |
+| `TEAM_SYNC_ANFRAGE_SPERRE` | `60` | Minuten, bis zu derselben Datei erneut gefragt werden darf |
 | `TEAM_SYNC_CHANNEL_DIR` | Worktree bzw. `<projekt>-channel` | Anderer Ort für den Channel |
 | `TEAM_SYNC_BRANCH` | `team-channel` | Anderer Branchname |
 | `TEAM_SYNC_STALE_HOURS` | `48` | Ab wann ein Status als veraltet gilt |
 | `TEAM_SYNC_MAX_STATUS` | `5` | Wie viele fremde Stände in den Sessionkontext kommen |
 | `TEAM_SYNC_MAX_DECISIONS` | `5` | Wie viele Entscheidungen in den Sessionkontext kommen |
+| `TEAM_SYNC_MAX_QUESTIONS` | `5` | Wie viele offene Fragen in den Sessionkontext kommen |
+| `TEAM_SYNC_MAX_STATUS_CHARS` | `700` | Maximale Länge eines fremden Standes im Kontext |
+| `TEAM_SYNC_MAX_FILES` | `12` | Wie viele Dateien ein Status auflistet |
+| `TEAM_SYNC_CACHE_SECONDS` | `60` | Gültigkeit des internen Cache für Name und Branch |
+| `TEAM_SYNC_FORCE` | – | Auf `1` gesetzt umgeht der Zwischenstand die Drosselung. Zum Ausprobieren gedacht, nicht für den Dauerbetrieb. |
 
-Die letzten beiden begrenzen, was bei jedem Sessionstart an Tokens
-anfällt. Wächst der Channel über Monate, wächst der Kontext nicht mit.
+Die `MAX_`-Werte begrenzen, was bei jedem Sessionstart an Tokens anfällt.
+Wächst der Channel über Monate, wächst der Kontext nicht mit.
+
+Die drei wichtigsten Stellschrauben im Alltag sind
+`TEAM_SYNC_EMPFANG_SECONDS` (wie schnell ihr voneinander erfahrt),
+`TEAM_SYNC_RESERVIERUNG_STUNDEN` (zu lang erzeugt Fehlalarme, zu kurz
+verpasst Kollisionen) und `TEAM_SYNC_ANFRAGE_TIMEOUT`.
 
 ---
 
 ## Was es bewusst nicht tut
 
-**Kein Echtzeit-Chat.** Zwei gleichzeitig laufende Sessions reden nicht
-miteinander. Der Austausch passiert beim Sessionstart und bei jedem
-Zwischenstand, nicht live.
+**Kein Echtzeit-Chat.** Zwei Sessions stimmen sich über git ab, nicht über
+eine Leitung. Zwischen Frage und Antwort liegen typischerweise ein paar
+Minuten. Das reicht für den Fall, um den es geht — „A sitzt seit zwanzig
+Minuten an dieser Datei" — und nicht für „beide greifen in derselben
+Sekunde zu". Letzteres soll es auch nicht abfangen.
+
+**Kein Blockieren.** Der Hinweis vor einem Edit verweigert nichts, er
+informiert. Ein Hook, der zu oft verweigert, bringt eine autonom laufende
+Session stundenlang unbemerkt zum Stehen — das wäre schlimmer als die
+doppelte Arbeit, die er verhindern soll.
 
 **Keine KI-Zusammenfassung im Hintergrund.** Der automatische Status wird
 aus dem Transkript zusammengesetzt, ohne zusätzlichen Modellaufruf. Jede

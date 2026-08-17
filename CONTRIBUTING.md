@@ -8,18 +8,50 @@ commands/           die Slash-Commands, je eine Markdown-Datei
 hooks/hooks.json    Verdrahtung der drei Hooks
 scripts/
   lib/
-    channel.py      git, Pfade, Namen, Sperre, Drosselung
+    channel.py      git, Pfade, Namen, Sperre, Drosselung, Cache
     frontmatter.py  Kopffelder der Channel-Dateien
     render.py       Dateiformate und der Sessionstart-Kontext
     transcript.py   Auswertung des Sessiontranskripts
     autostatus.py   gemeinsame Logik der beiden schreibenden Hooks
+    reservierung.py wer sitzt an welcher Datei
+    anfrage.py      Klärung zwischen zwei Sessions
+    empfang.py      der Rückkanal in laufende Sessions
   session_start.py       SessionStart-Hook
-  session_checkpoint.py  Stop-Hook, gedrosselt
+  session_checkpoint.py  Stop-Hook: Zwischenstand und Rückkanal
   session_end.py         SessionEnd-Hook
+  tool_pre_edit.py       PreToolUse-Hook, warnt vor belegten Dateien
+  tool_post_edit.py      PostToolUse-Hook, reserviert beim ersten Zugriff
   setup_channel.py       einmaliges Setup
   team_sync.py           die Kommandozeile hinter den Commands
 tests/              unittest, ohne externe Pakete
 ```
+
+## Der heiße Pfad
+
+`tool_pre_edit.py` läuft **vor jedem einzelnen Edit**. Dort gilt eine
+Regel, die sonst nirgends gilt:
+
+> Kein Netzwerkzugriff, kein git-Aufruf, so früh aussteigen wie möglich.
+
+Name, Branch und Channel-Pfad kommen aus `schneller_kontext()` in
+`channel.py`, einem Cache im Git-Verzeichnis. Ein `git pull` an dieser
+Stelle wären ein bis drei Sekunden mal hunderte Edits — das erwürgt die
+Session. Der Pull läuft stattdessen im `Stop`-Hook mit.
+
+Wird der Hook langsam, fällt das nicht als Fehler auf, sondern nur als
+zähe Session, und dann sucht niemand hier. Deshalb misst
+`test_hook_laeuft_schnell` die Laufzeit mit.
+
+## Zwei Sätze, die das Verhalten bestimmen
+
+**Der Hook blockiert nie.** `permissionDecision` ist immer `allow`, die
+Meldung geht über `additionalContext`. Verweigern wäre der sichere Weg
+gegen doppelte Arbeit, aber ein Fehlalarm bremst eine autonome Session
+stundenlang, ohne dass es jemand merkt.
+
+**Warten heißt nie Blockieren.** Wer auf eine belegte Datei stößt, legt
+eine Anfrage ab und arbeitet weiter. Jede Meldung, die zum Warten
+auffordert statt zum Weiterarbeiten, ist ein Fehler im Text.
 
 ## Zwei Regeln, die alles andere bestimmen
 

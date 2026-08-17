@@ -18,6 +18,7 @@ Zwei Regeln, die für alles hier gelten:
    Plugin auf jedem Rechner ohne Installation läuft.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -31,7 +32,10 @@ from pathlib import Path
 CHANNEL_BRANCH = os.environ.get("TEAM_SYNC_BRANCH", "team-channel")
 
 # Unterordner im Channel.
-SUBDIRS = ("status", "questions", "decisions")
+SUBDIRS = ("status", "questions", "decisions", "reservierungen")
+
+# Wie lange der schnelle Kontext-Cache gilt (Sekunden).
+CACHE_SECONDS = int(os.environ.get("TEAM_SYNC_CACHE_SECONDS", "60"))
 
 # Ab wann ein Status als veraltet gilt (Stunden).
 STALE_AFTER_HOURS = int(os.environ.get("TEAM_SYNC_STALE_HOURS", "48"))
@@ -437,6 +441,65 @@ def write_and_push(channel_dir: Path, rel_path: str, content: str, message: str)
             return False
 
         return push_channel(channel_dir, message)
+
+
+def schneller_kontext(project_dir: Path):
+    """
+    Eigener Name, aktueller Branch und Channel-Pfad — aus einem Cache.
+
+    Gedacht für die Hooks, die vor jedem einzelnen Edit laufen. Diese
+    drei Angaben normal zu ermitteln kostet drei git-Aufrufe, und drei
+    git-Aufrufe mal hunderte Edits pro Session sind Minuten, die
+    niemandem auffallen, weil sie sich über den Tag verteilen.
+
+    Der Cache liegt im Git-Verzeichnis, wird also nie synchronisiert,
+    und gilt eine Minute. Ein Branchwechsel wird dadurch mit bis zu
+    einer Minute Verzögerung bemerkt. Für eine Warnung ist das
+    unerheblich.
+
+    Gibt None zurück, wenn nichts zu ermitteln ist.
+    """
+    git_dir = get_git_dir(project_dir)
+    cache_pfad = git_dir / "team-sync-cache.json" if git_dir else None
+
+    if cache_pfad is not None:
+        try:
+            if time.time() - cache_pfad.stat().st_mtime < CACHE_SECONDS:
+                daten = json.loads(cache_pfad.read_text(encoding="utf-8"))
+                if isinstance(daten, dict) and daten.get("person"):
+                    return daten
+        except Exception:
+            pass
+
+    daten = {
+        "person": get_agent_name(project_dir),
+        "branch": get_current_branch(project_dir),
+        "channel": str(get_channel_dir(project_dir)),
+    }
+
+    if cache_pfad is not None:
+        try:
+            cache_pfad.write_text(json.dumps(daten), encoding="utf-8")
+        except Exception:
+            pass
+
+    return daten
+
+
+def cache_verwerfen(project_dir: Path):
+    """
+    Löscht den Cache, damit er beim nächsten Zugriff neu entsteht.
+
+    Nötig nach dem Einrichten des Channels: Bis dahin hat der Cache
+    einen Pfad gespeichert, unter dem noch nichts lag.
+    """
+    git_dir = get_git_dir(project_dir)
+    if git_dir is None:
+        return
+    try:
+        (git_dir / "team-sync-cache.json").unlink()
+    except Exception:
+        pass
 
 
 def write_text_lf(path: Path, content: str):

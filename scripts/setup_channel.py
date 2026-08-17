@@ -28,7 +28,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from lib.channel import CHANNEL_BRANCH, SUBDIRS, run_git, setup_stdio, write_text_lf
+from lib.channel import (
+    CHANNEL_BRANCH,
+    SUBDIRS,
+    cache_verwerfen,
+    run_git,
+    setup_stdio,
+    write_text_lf,
+)
 
 README_CHANNEL = """# Team-Channel
 
@@ -134,7 +141,10 @@ def fuelle_struktur(channel_dir: Path):
     # Eintrag hier ist die zweite Sicherung: Nichts, was nur den
     # laufenden Prozess betrifft, darf je in den geteilten Branch
     # geraten, sonst streiten sich zwei Rechner um dieselbe Datei.
-    write_text_lf(channel_dir / ".gitignore", "team-sync.lock\n.team-sync.lock\n")
+    write_text_lf(
+        channel_dir / ".gitignore",
+        "team-sync.lock\n.team-sync.lock\nteam-sync-cache.json\n",
+    )
 
 
 def main() -> int:
@@ -221,6 +231,10 @@ def main() -> int:
         # sein, etwa wenn er mit einer älteren Version angelegt wurde.
         for unterordner in SUBDIRS:
             (channel_dir / unterordner).mkdir(parents=True, exist_ok=True)
+
+    # Ein Cache aus der Zeit vor dem Setup zeigt auf einen Ort, an dem
+    # nichts lag. Die Hooks würden ihn bis zu einer Minute weiterglauben.
+    cache_verwerfen(project_dir)
 
     print()
     print("Fertig.")

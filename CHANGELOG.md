@@ -3,6 +3,63 @@
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.3.0] — 2026-08-17
+
+Bis hierher war team-sync ein Logbuch: Es hielt fest, was passiert ist,
+und wurde einmal beim Sessionstart gelesen. Wer morgens eine Session
+öffnete und bis mittags durcharbeitete, erfuhr in der Zwischenzeit
+nichts. Der Kanal war gebaut, der Empfänger fehlte.
+
+Diese Version macht daraus etwas, das sich meldet, wenn es darauf
+ankommt — gedacht für lange, autonom laufende Sessions, in denen der
+Empfänger einer Meldung nicht der Mensch am Bildschirm ist, sondern
+Claude selbst.
+
+### Neu
+
+- **Reservierungen.** Beim ersten Zugriff auf eine Datei wird sie für
+  die eigene Session reserviert. Ein `PostToolUse`-Hook erledigt das,
+  aber nur beim ersten Mal — sonst entstünde ein Commit pro Edit.
+- **Warnung vor dem Edit.** Ein `PreToolUse`-Hook meldet, wenn gerade
+  jemand anders an derselben Datei sitzt. Er **blockiert nie**: Ein Hook,
+  der zu oft verweigert, bringt eine autonome Session stundenlang
+  unbemerkt zum Stehen. Auf verschiedenen Branches gibt es nur einen
+  knappen Hinweis, weil git das später ohnehin löst.
+- **Dateianfragen.** Statt zu warten, legt die zweite Session eine
+  Anfrage ab und arbeitet sofort weiter. Die erste beantwortet sie oft
+  genauer, als ein Mensch es könnte — sie weiß, an welcher Stelle sie
+  gerade arbeitet. Bleibt die Antwort aus, gilt die Datei nach zehn
+  Minuten als frei; die Gegenseite kann eine tote Session sein.
+- **Rückkanal in laufende Sessions.** Beantwortete Anfragen, neue Fragen
+  und neue Festlegungen werden während der Arbeit gemeldet, nicht erst
+  beim nächsten Start. Gemeldet wird nur, was noch nicht gesehen wurde —
+  eine Meldung, die sich wiederholt, wird nach dem zweiten Mal ignoriert.
+- Neue Kommandos `anfrage`, `freigeben` und `reservierungen`.
+- Reservierungen werden beim Sessionende freigegeben und verfallen nach
+  vier Stunden.
+
+### Behoben
+
+- **Die Anfragesperre griff nie.** Sie hing an einer Sitzungskennung,
+  die der Hook aus seiner Payload kennt und das Kommandozeilenwerkzeug
+  nicht — zwei verschiedene Schlüssel, ein wirkungsloser Riegel. Im
+  Alltag hätte das eine Anfrage pro Edit erzeugt. Die Sperre hängt jetzt
+  an der Zeit.
+- **Absolute Pfade in Reservierungen.** Schlug die Relativierung fehl,
+  reservierte Person A `C:/Users/lars/projekt/auth.py`, während Person B
+  nach `/home/max/projekt/auth.py` suchte — dieselbe Datei, zwei
+  Einträge, Kollision unentdeckt. Jetzt mit zweitem Weg über einen
+  Vergleich ohne Rücksicht auf Groß- und Kleinschreibung.
+- Drei Einstellungen aus `render.py` waren nie dokumentiert. Der
+  entsprechende Test prüfte nur ein einziges Modul.
+
+### Geändert
+
+- `SUBDIRS` enthält `reservierungen/`. Bestehende Channels bekommen den
+  Ordner beim nächsten Schreibzugriff.
+- Ein Cache für Name, Branch und Channel-Pfad im Git-Verzeichnis. Ohne
+  ihn bräuchte der Hook vor jedem Edit drei git-Aufrufe.
+
 ## [0.2.0] — 2026-08-16
 
 Erste vollständige Fassung. Der Prototyp 0.1.0 hatte die Struktur, aber

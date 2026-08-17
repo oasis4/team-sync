@@ -339,6 +339,22 @@ def build_overview(channel_dir, me: str) -> str:
         lines.append("Noch kein Status im Channel.")
         lines.append("")
 
+    # Reservierungen sind die genaueste Antwort auf "wer arbeitet
+    # woran" — genauer als der Status, weil sie beim Zugriff entstehen
+    # und nicht alle zehn Minuten.
+    from .reservierung import alle_fremden, beschreibe, eigene_lesen
+
+    fremde = alle_fremden(channel_dir, me)
+    _, eigene = eigene_lesen(channel_dir, me)
+    if fremde or eigene:
+        lines.append("## Aktuell belegte Dateien")
+        lines.append("")
+        for datei, seit in eigene:
+            lines.append(f"- `{datei}` — von dir, seit {describe_age(seit) or seit}")
+        for eintrag in fremde:
+            lines.append(f"- `{eintrag['datei']}` — {beschreibe(eintrag)}")
+        lines.append("")
+
     for person in (me,):
         offen = open_questions_for(channel_dir, person)
         if offen:

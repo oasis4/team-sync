@@ -27,12 +27,13 @@ Aufruf:
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from lib import frontmatter, render
+from lib import anfrage, frontmatter, render, reservierung
 from lib.channel import (
     CHANNEL_BRANCH,
     ChannelLock,
@@ -75,6 +76,8 @@ class Kontext:
         self.channel_dir = get_channel_dir(self.project_dir)
         self.me = get_agent_name(self.project_dir)
         self.branch = get_current_branch(self.project_dir)
+
+        self.session = os.environ.get("CLAUDE_SESSION_ID", "")
 
     def bereit(self) -> bool:
         return channel_is_ready(self.channel_dir)
@@ -381,6 +384,135 @@ def cmd_sync(args) -> int:
 
 
 # ---------------------------------------------------------------------------
+# anfrage, freigeben, reservierungen
+# ---------------------------------------------------------------------------
+
+
+def cmd_anfrage(args) -> int:
+    """
+    Fragt nach, ob man an eine reservierte Datei darf.
+
+    Wichtig ist, was danach passiert: Der Aufrufer wartet nicht, sondern
+    arbeitet weiter. Eine Auto-Session, die auf eine Antwort wartet,
+    verbrennt genau die Zeit, die das ganze Werkzeug sparen soll.
+    """
+    ctx = Kontext()
+    if not ctx.bereit():
+        return kein_setup(ctx)
+
+    datei = reservierung.normalisiere(args.datei, ctx.project_dir)
+    belegt = reservierung.belegt_von(ctx.channel_dir, ctx.me, datei)
+
+    if not belegt:
+        print(
+            f"{datei} ist derzeit von niemandem reserviert. "
+            "Du kannst direkt daran arbeiten."
+        )
+        return EXIT_OK
+
+    if anfrage.schon_gefragt(ctx.project_dir, datei):
+        print(
+            f"Zu {datei} wurde vor Kurzem bereits gefragt. "
+            "Keine zweite Anfrage abgelegt."
+        )
+        return EXIT_OK
+
+    laufend = anfrage.offen_und_wartend(ctx.channel_dir, datei)
+    if laufend:
+        print(
+            f"Zu {datei} läuft bereits eine unbeantwortete Anfrage "
+            f"(id {laufend['id']}). Keine zweite abgelegt."
+        )
+        return EXIT_OK
+
+    eintrag = belegt[0]
+    text = text_argument(args) or f"Ich möchte an {datei} arbeiten."
+    text += (
+        f"\n\nFalls du nur an einem bestimmten Abschnitt sitzt, sag welchem — "
+        f"dann kann ich am Rest weiterarbeiten. Antwort bitte zügig, ich "
+        f"arbeite währenddessen an etwas anderem."
+    )
+
+    kennung = anfrage.stellen(
+        ctx.channel_dir, ctx.me, eintrag["person"], datei, ctx.branch, text
+    )
+    anfrage.merke_gefragt(ctx.project_dir, datei)
+
+    print(
+        f"Anfrage an {eintrag['person']} zu {datei} abgelegt (id {kennung}).\n"
+        f"Nicht warten: Arbeite an einem anderen Punkt weiter und komm später "
+        f"zurück. Ohne Antwort gilt die Datei nach "
+        f"{anfrage.TIMEOUT_MINUTEN} Minuten als frei."
+    )
+    return EXIT_OK
+
+
+def cmd_freigeben(args) -> int:
+    ctx = Kontext()
+    if not ctx.bereit():
+        return kein_setup(ctx)
+
+    if args.alle:
+        erfolg = reservierung.freigeben(
+            ctx.channel_dir, ctx.me, ctx.branch, ctx.session, None
+        )
+        print("Alle Reservierungen freigegeben." if erfolg else "Nichts freizugeben.")
+        return EXIT_OK
+
+    if not args.datei:
+        fehler("Bitte --datei angeben oder --alle.")
+        return EXIT_FEHLER
+
+    datei = reservierung.normalisiere(args.datei, ctx.project_dir)
+    erfolg = reservierung.freigeben(
+        ctx.channel_dir, ctx.me, ctx.branch, ctx.session, datei
+    )
+    print(f"{datei} freigegeben." if erfolg else f"{datei} war nicht reserviert.")
+    return EXIT_OK
+
+
+def cmd_reservierungen(args) -> int:
+    ctx = Kontext()
+    if not ctx.bereit():
+        return kein_setup(ctx)
+
+    if not args.kein_pull:
+        pull_channel(ctx.channel_dir)
+
+    fremde = reservierung.alle_fremden(ctx.channel_dir, ctx.me)
+    _, eigene = reservierung.eigene_lesen(ctx.channel_dir, ctx.me)
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "eigene": [{"datei": d, "seit": s} for d, s in eigene],
+                    "fremde": fremde,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return EXIT_OK
+
+    if eigene:
+        print("Von dir reserviert:")
+        for datei, seit in eigene:
+            print(f"  {datei} (seit {seit})")
+    else:
+        print("Von dir reserviert: nichts")
+
+    if fremde:
+        print("\nVon anderen reserviert:")
+        for eintrag in fremde:
+            print(f"  {eintrag['datei']} — {reservierung.beschreibe(eintrag)}")
+    else:
+        print("\nVon anderen reserviert: nichts")
+
+    return EXIT_OK
+
+
+# ---------------------------------------------------------------------------
 # uebersicht, kontext
 # ---------------------------------------------------------------------------
 
@@ -556,6 +688,23 @@ def build_parser():
         "--datei", action="append", help="Angefasste Datei, mehrfach angebbar"
     )
     p_sync.set_defaults(func=cmd_sync)
+
+    p_anfrage = sub.add_parser(
+        "anfrage", help="Nachfragen, ob man an eine reservierte Datei darf"
+    )
+    p_anfrage.add_argument("--datei", required=True)
+    _text_argumente(p_anfrage, "Was du vorhast")
+    p_anfrage.set_defaults(func=cmd_anfrage)
+
+    p_frei = sub.add_parser("freigeben", help="Eigene Reservierungen aufheben")
+    p_frei.add_argument("--datei", help="Einzelne Datei")
+    p_frei.add_argument("--alle", action="store_true", help="Alle auf einmal")
+    p_frei.set_defaults(func=cmd_freigeben)
+
+    p_res = sub.add_parser("reservierungen", help="Wer sitzt an welcher Datei")
+    p_res.add_argument("--json", action="store_true")
+    p_res.add_argument("--kein-pull", dest="kein_pull", action="store_true")
+    p_res.set_defaults(func=cmd_reservierungen)
 
     p_ueber = sub.add_parser("uebersicht", help="Wer arbeitet woran, was ist offen")
     p_ueber.set_defaults(func=cmd_uebersicht)

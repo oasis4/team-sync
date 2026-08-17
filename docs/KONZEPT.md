@@ -127,6 +127,59 @@ Dateiname, Kopffelder, Commit und Push sind aber immer gleich. Sie
 gehören in `team_sync.py`. Für Claude bleibt, was ein Skript nicht kann:
 den Inhalt formulieren.
 
+## Nachtrag: vom Logbuch zum Abstimmen (0.3.0)
+
+Die erste Fassung war ein Logbuch. Sie hielt fest, was passiert war, und
+wurde einmal beim Sessionstart gelesen. Im Gespräch über den echten
+Alltag kamen zwei Dinge heraus, die das nicht deckt.
+
+**Die Sessions laufen oft autonom über Stunden.** Damit ist der
+Empfänger einer Meldung nicht der Mensch vor dem Bildschirm, sondern
+Claude selbst. Das ist kein Nachteil — Claude kann reagieren, ohne dass
+jemand hinschaut. Aber es verschiebt, wofür das Werkzeug gebaut sein
+muss: Meldungen sind Handlungsanweisungen, keine Rückfragen. Es ist
+niemand da, der antworten könnte.
+
+**Der Status beantwortet die falsche Frage.** Er meldet Vergangenes
+("Max hat diese Dateien angefasst") und ist bis zu zehn Minuten alt. Als
+Logbuch reicht das, als Kollisionsschutz ist es zu grob und zu spät.
+Gebraucht wird eine **Reservierung**: "Ich bin an auth.py dran, seit
+14:32."
+
+### Der Satz, an dem das Design hängt
+
+> Warten darf nie Blockieren heißen.
+
+Eine autonome Session, die fünf Minuten wartet, verbrennt fünf Minuten —
+genau die Zeit, die gewonnen werden soll. Deshalb: Anfrage ablegen,
+sofort am nächsten Punkt weiterarbeiten, später zurückkommen. Aus totem
+Warten wird ein Kontextwechsel.
+
+Daraus folgt auch, warum der Hook vor einem Edit **nie blockiert**.
+Verweigern wäre der sichere Weg gegen doppelte Arbeit — aber ein
+Fehlalarm bremst eine autonome Session dann stundenlang, ohne dass es
+jemand merkt. Ein Hinweis, den Claude ignorieren kann, ist das kleinere
+Übel. Ob das reicht, zeigt erst der Alltag.
+
+### Warum der Branch mitzählt
+
+Zwei Sessions an derselben Datei bedeuten je nach Branch Verschiedenes.
+Gleicher Branch heißt Merge-Chaos, verschiedene Branches löst git später
+ohnehin. Ohne diese Unterscheidung wäre die Warnung ein
+Fehlalarm-Generator — und nach dem dritten Fehlalarm wird sie überlesen.
+Dann ist die Maschinerie gebaut und nichts gewonnen.
+
+### Was offen bleibt
+
+Dass drei Sessions dasselbe Problem auf drei Arten lösen und die
+Codebase uneinheitlich wird, ist ein eigenes Problem. Dagegen hilft keine
+Kollisionswarnung, sondern nur Festlegungen, die präsent bleiben — in
+einer Vier-Stunden-Session ist der Startkontext längst aus dem Fenster
+gerutscht. Der Rückkanal meldet neue Entscheidungen inzwischen mitten in
+die laufende Arbeit; ob das genügt, muss sich zeigen.
+
+---
+
 ## Bewusste Grenzen
 
 **Kein Echtzeit-Chat.** Zwei gleichzeitig laufende Sessions reden nicht

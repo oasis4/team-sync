@@ -57,7 +57,7 @@ jobs:
           done
 
       - name: Plugin-Struktur prüfen
-        run: python -m unittest discover -s tests -t tests -k TestManifeste -k TestHooks -k TestCommands -v
+        run: python -m unittest discover -s tests -t tests -k TestManifeste -k TestHooks -k TestCommands -k TestAntigravity -v
 
       - name: Syntax aller Skripte
         run: python -m compileall -q scripts tests

@@ -123,8 +123,19 @@ def run_git(args, cwd, timeout=15):
 
 
 def get_project_dir() -> Path:
-    """Verzeichnis des eigentlichen Projekt-Repos."""
-    raw = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    """
+    Verzeichnis des eigentlichen Projekt-Repos.
+
+    TEAM_SYNC_PROJECT_DIR steht vorn, weil es unter Antigravity aus der
+    Hook-Nutzlast gesetzt wird (siehe lib/host.py). Dort gibt es kein
+    Gegenstück zu CLAUDE_PROJECT_DIR, und das aktuelle Verzeichnis eines
+    Hook-Prozesses kann alles Mögliche sein.
+    """
+    raw = (
+        os.environ.get("TEAM_SYNC_PROJECT_DIR")
+        or os.environ.get("CLAUDE_PROJECT_DIR")
+        or os.getcwd()
+    )
     try:
         return Path(raw).resolve()
     except Exception:
@@ -573,6 +584,56 @@ def touch_throttle(project_dir: Path):
         marker.touch()
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Angefasste Dateien dieser Sitzung
+# ---------------------------------------------------------------------------
+
+
+def _dateien_pfad(project_dir: Path):
+    git_dir = get_git_dir(project_dir)
+    return (git_dir / "team-sync-dateien.json") if git_dir else None
+
+
+def datei_merken(project_dir: Path, datei: str):
+    """
+    Hält fest, welche Dateien auf diesem Rechner angefasst wurden.
+
+    Die Liste liegt im Git-Verzeichnis und wird nie synchronisiert. Sie
+    ist der zweite Weg zu der Angabe, die sonst aus dem Transkript
+    kommt. Das Transkriptformat gehört dem Hostprogramm und ändert sich
+    mit ihm; diese Liste entsteht aus unseren eigenen Hooks und ist
+    deshalb überall gleich verlässlich.
+    """
+    pfad = _dateien_pfad(project_dir)
+    if pfad is None or not datei:
+        return
+
+    bekannt = gemerkte_dateien(project_dir)
+    if datei in bekannt:
+        return
+
+    bekannt.append(datei)
+    try:
+        pfad.parent.mkdir(parents=True, exist_ok=True)
+        pfad.write_text(
+            json.dumps({"dateien": bekannt[-200:]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
+def gemerkte_dateien(project_dir: Path):
+    pfad = _dateien_pfad(project_dir)
+    if pfad is None or not pfad.exists():
+        return []
+    try:
+        daten = json.loads(pfad.read_text(encoding="utf-8")).get("dateien", [])
+        return [d for d in daten if isinstance(d, str)] if isinstance(daten, list) else []
+    except Exception:
+        return []
 
 
 # ---------------------------------------------------------------------------

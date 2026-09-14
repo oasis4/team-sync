@@ -28,6 +28,7 @@ Aufruf:
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -542,6 +543,69 @@ def cmd_kontext(args) -> int:
 # ---------------------------------------------------------------------------
 
 
+def _antigravity_pruefen(ctx, probleme):
+    """
+    Zeigt, ob die Antigravity-Seite eingerichtet ist.
+
+    Nur ein Bericht, keine Pflicht. Wer ausschließlich mit Claude Code
+    arbeitet, soll hier keine Fehlermeldung sehen, deshalb landet nichts
+    davon in der Problemliste, solange gar nichts eingerichtet ist. Ist
+    aber etwas eingetragen und zeigt ins Leere, ist das ein echter
+    Fehler: Der Hook schweigt dann einfach, und niemand merkt es.
+    """
+    from pathlib import Path as _Path
+
+    kandidaten = [
+        ctx.project_dir / ".agents" / "hooks.json",
+        _Path.home() / ".gemini" / "config" / "hooks.json",
+    ]
+
+    gefunden = []
+    for pfad in kandidaten:
+        try:
+            if not pfad.is_file():
+                continue
+            daten = json.loads(pfad.read_text(encoding="utf-8"))
+        except Exception as exc:
+            print(f"\nAntigravity:       {pfad} nicht lesbar ({exc})")
+            probleme.append(f"{pfad} ist kein lesbares JSON.")
+            continue
+        if isinstance(daten, dict) and "team-sync" in daten:
+            gefunden.append((pfad, daten["team-sync"]))
+
+    if not gefunden:
+        print("\nAntigravity:       nicht eingerichtet (nur nötig, wenn jemand damit arbeitet)")
+        print("                   Einrichten: python3 scripts/setup_antigravity.py")
+        return
+
+    print("\nAntigravity:")
+    for pfad, gruppe in gefunden:
+        ereignisse = ", ".join(sorted(gruppe)) if isinstance(gruppe, dict) else "keine"
+        print(f"  {pfad}")
+        print(f"    Ereignisse: {ereignisse}")
+
+        if not isinstance(gruppe, dict):
+            probleme.append(f"Die Gruppe 'team-sync' in {pfad} hat einen unerwarteten Aufbau.")
+            continue
+
+        for eintraege in gruppe.values():
+            for gruppeneintrag in eintraege if isinstance(eintraege, list) else []:
+                for hook in gruppeneintrag.get("hooks", []):
+                    befehl = hook.get("command", "")
+                    treffer = re.search(r'"([^"]+\.py)"', befehl) or re.search(
+                        r"(\S+\.py)", befehl
+                    )
+                    if not treffer:
+                        continue
+                    skript = _Path(treffer.group(1))
+                    if not skript.is_file():
+                        probleme.append(
+                            f"Der Hook in {pfad} zeigt auf {skript}, dort liegt nichts. "
+                            f"Nach einem Verschieben des Plugins hilft "
+                            f"'python3 scripts/setup_antigravity.py' erneut."
+                        )
+
+
 def cmd_doctor(args) -> int:
     setup_stdio()
     ctx = Kontext()
@@ -614,6 +678,8 @@ def cmd_doctor(args) -> int:
         print("\nWorktrees:")
         for pfad, branch in worktrees:
             print(f"  {branch:<20} {pfad}")
+
+    _antigravity_pruefen(ctx, probleme)
 
     if probleme:
         print("\nGefundene Probleme:")

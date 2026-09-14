@@ -3,6 +3,63 @@
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.4.0] — 2026-09-14
+
+Bis hierher setzte team-sync voraus, dass alle im Team dasselbe Programm
+benutzen. Das ist eine Annahme, die bei der ersten neuen Person kippt.
+Der Kanal selbst hat nie davon abgehangen, er ist ein Git-Branch mit
+Markdown darin, aber die Hooks sprachen nur ein Protokoll.
+
+Diese Version trennt beides. Wer mit Google Antigravity arbeitet, sitzt
+ab jetzt im selben Channel wie alle anderen, sieht dieselben
+Reservierungen und bekommt dieselben Meldungen.
+
+### Neu
+
+- **Antigravity als zweites Hostprogramm.** Eigene Hooks, eigene
+  Dauerregel, dieselben fünf Befehle als Workflows. Eingerichtet mit
+  `scripts/setup_antigravity.py`, beschrieben in
+  [docs/ANTIGRAVITY.md](docs/ANTIGRAVITY.md).
+- **Host-Abstraktion in `lib/host.py`.** Die einzige Stelle, die weiß,
+  welches Programm gerade läuft. Sie liest beide Nutzlastformate, gibt
+  jedem seine eigene Antwortform und sorgt dafür, dass der Rest des
+  Plugins hostneutral bleibt.
+- **Zurückgestellte Hinweise.** Antigravity erwartet vor einem
+  Werkzeugaufruf genau eine Erlaubnis und sonst nichts. Der Hinweis auf
+  eine belegte Datei wird deshalb abgelegt und beim nächsten
+  Modellaufruf nachgereicht, statt ein Feld zu senden, das der Parser
+  ablehnen könnte.
+- **Feld `werkzeug` im Status.** Die Übersicht zeigt jetzt, wer mit
+  welchem Programm arbeitet. Eine Lesehilfe, keine Statistik: Eine
+  Reservierung aus einem anderen Werkzeug kann träger sein, und das soll
+  niemand für einen Fehler halten.
+- `doctor` berichtet, ob und wo die Antigravity-Seite eingetragen ist,
+  und meldet Hooks, die ins Leere zeigen. Das passiert, sobald der Klon
+  verschoben wird, denn dort stehen absolute Pfade.
+
+### Geändert
+
+- **Die Dateiliste im Status hängt nicht mehr am Transkript.** Sie
+  entsteht aus den eigenen Hooks und ist damit unter jedem Programm
+  gleich verlässlich. Das Transkript bleibt die erste Quelle, weil es
+  auch Dateien von vor dem Einrichten des Channels kennt.
+- **Die Transkriptauswertung hat einen zweiten Weg.** Liefert das
+  bekannte Format nichts, wird nachgiebig nach Nutzertext gesucht, ohne
+  eine Struktur vorauszusetzen. Findet auch das nichts, wird der Status
+  dünner statt leer.
+- `TEAM_SYNC_PROJECT_DIR` steht jetzt vor `CLAUDE_PROJECT_DIR`. Unter
+  Antigravity gibt es kein Gegenstück, der Projektordner kommt dort aus
+  der Hook-Nutzlast.
+
+### Bekannte Grenzen
+
+- Unter Antigravity kommt der Hinweis auf eine belegte Datei einen
+  Schritt später als unter Claude Code. Der Grund steht oben.
+- Die Namen der schreibenden Werkzeuge liegen dort nicht fest. Das
+  Plugin rät über den Namen und verlangt zusätzlich einen Dateipfad im
+  Aufruf. Wer die Namen seiner Installation kennt, setzt
+  `TEAM_SYNC_AG_EDIT_TOOLS`.
+
 ## [0.3.0] — 2026-08-17
 
 Bis hierher war team-sync ein Logbuch: Es hielt fest, was passiert ist,

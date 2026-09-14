@@ -127,6 +127,66 @@ class TeamUmgebung:
             env=self.umgebung(name, extra),
         )
 
+    def umgebung_antigravity(self, name: str, extra=None):
+        """
+        Wie umgebung(), aber ohne die Claude-Code-Variablen.
+
+        Unter Antigravity gibt es weder CLAUDE_PROJECT_DIR noch
+        CLAUDE_PLUGIN_ROOT. Genau das ist der Fall, den die Hooks
+        überstehen müssen: Der Projektordner steht nur in der Nutzlast.
+        """
+        env = self.umgebung(name, extra)
+        env.pop("CLAUDE_PROJECT_DIR", None)
+        env.pop("CLAUDE_PLUGIN_ROOT", None)
+        env.pop("TEAM_SYNC_PROJECT_DIR", None)
+        env.pop("TEAM_SYNC_HOST", None)
+        if extra:
+            env.update(extra)
+        return env
+
+    def ag_hook(self, name: str, skript: str, payload=None, argv=(), extra=None):
+        """Ruft ein Hook-Skript so auf, wie Antigravity es tut."""
+        return subprocess.run(
+            [sys.executable, str(SCRIPTS / skript)] + [str(a) for a in argv],
+            cwd=str(self.basis),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            input=json.dumps(payload or {}),
+            env=self.umgebung_antigravity(name, extra),
+        )
+
+    def ag_werkzeug(self, name: str, datei, werkzeug="write_to_file", unterhaltung="c1"):
+        """Nutzlast eines Werkzeugaufrufs im Antigravity-Format."""
+        return {
+            "conversationId": unterhaltung,
+            "workspacePaths": [str(self.projekte[name])],
+            "stepIdx": 1,
+            "toolCall": {"name": werkzeug, "args": {"file_path": str(datei)}},
+        }
+
+    def ag_invocation(self, name: str, transkript="", unterhaltung="c1"):
+        """Nutzlast von PreInvocation, PostInvocation und Stop."""
+        return {
+            "conversationId": unterhaltung,
+            "workspacePaths": [str(self.projekte[name])],
+            "transcriptPath": str(transkript),
+        }
+
+    def ag_transkript_schreiben(self, name: str, eintraege) -> Path:
+        """
+        Legt ein Transkript im fremden Format an.
+
+        Bewusst nicht das Claude-Code-Schema, denn geprüft werden soll
+        gerade der nachgiebige Weg in lib/transcript.py.
+        """
+        pfad = self.basis / f"ag-transcript-{name}.jsonl"
+        with pfad.open("w", encoding="utf-8") as handle:
+            for eintrag in eintraege:
+                handle.write(json.dumps(eintrag, ensure_ascii=False) + "\n")
+        return pfad
+
     def channel_datei(self, name: str, relativ: str) -> Path:
         return self.channels[name] / relativ
 
@@ -187,3 +247,12 @@ class TeamTestCase(unittest.TestCase):
             ergebnis.returncode, 0,
             f"{hinweis}\nstdout: {ergebnis.stdout}\nstderr: {ergebnis.stderr}",
         )
+
+
+def ag_nutzer_nachricht(text: str):
+    """Eine Nutzeräußerung, wie ein fremdes Transkript sie schreibt."""
+    return {"type": "USER_MESSAGE", "content": text}
+
+
+def ag_planer_antwort(text: str):
+    return {"type": "PLANNER_RESPONSE", "content": text}

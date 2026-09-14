@@ -1,7 +1,9 @@
 # team-sync
 
-Ein Claude-Code-Plugin, das den Arbeitsstand zwischen mehreren Personen
-teilt, die am selben Repository arbeiten — jede in ihrer eigenen Session.
+Ein Plugin, das den Arbeitsstand zwischen mehreren Personen teilt, die am
+selben Repository arbeiten, jede in ihrer eigenen Session. Läuft unter
+Claude Code und unter [Google Antigravity](docs/ANTIGRAVITY.md), auch
+gemischt im selben Team.
 
 Wer zu mehreren mit Claude Code an einem Repo arbeitet, kennt beide
 Probleme: Jede neue Session fängt bei null an, Architekturentscheidungen
@@ -11,8 +13,13 @@ laufend aktualisierten Wissensstand in dasselbe Git-Repository, auf einen
 eigenen Branch.
 
 **Kein zentraler Server, keine geteilte KI-Nutzung.** Jede Person nutzt
-weiterhin ihre eigene Claude-Code-Session mit ihrer eigenen Membership.
-Das Plugin schiebt nur Textdateien über git hin und her.
+weiterhin ihre eigene Session mit ihrem eigenen Zugang. Das Plugin
+schiebt nur Textdateien über git hin und her.
+
+**Kein gemeinsames Werkzeug nötig.** Wer mit Antigravity arbeitet,
+schreibt in denselben Channel wie alle anderen und bekommt dieselben
+Meldungen. Der Kanal ist ein Git-Branch mit Markdown darin, und dem ist
+gleich, welches Programm ihn beschreibt.
 
 ---
 
@@ -126,6 +133,23 @@ Wer lieber das installierte Plugin nutzt: Es liegt unter
 `~/.claude/plugins/marketplaces/`, der genaue Ordnername steht in
 `~/.claude/plugins/installed_plugins.json`.
 
+### 3. Nur für Antigravity
+
+Antigravity kennt das Pluginformat von Claude Code nicht, es liest seine
+Erweiterungen aus eigenen Dateien. Ein Skript legt sie an, im Projekt
+ausgeführt:
+
+```bash
+cd /pfad/zu/deinem/projekt && python3 ~/werkzeuge/team-sync/scripts/setup_antigravity.py
+```
+
+Danach Antigravity einmal neu starten. Was dabei geschrieben wird, wie
+die Ereignisse zugeordnet sind und wo die Grenzen liegen, steht in
+[docs/ANTIGRAVITY.md](docs/ANTIGRAVITY.md).
+
+Wer nur mit Claude Code arbeitet, überspringt diesen Schritt. Das Plugin
+funktioniert ohne ihn unverändert.
+
 ### Voraussetzungen
 
 - Python 3.9 oder neuer, als `python3` aufrufbar
@@ -149,6 +173,9 @@ Zeilen in [hooks/hooks.json](hooks/hooks.json) entsprechend an.
 | `/answer` | Offene Fragen an dich durchgehen und beantworten |
 | `/decide JWT statt Server-Session` | Entscheidung mit Begründung protokollieren |
 | `/sync` | Sofort einen selbst formulierten Stand pushen |
+
+Unter Antigravity heißen dieselben fünf Befehle genauso, sie liegen dort
+als Workflows unter `.agents/workflows/`.
 
 Reservierungen laufen ohne Zutun. Wer sie von Hand ansehen oder aufheben
 will:
@@ -195,6 +222,11 @@ Alles optional, per Umgebungsvariable:
 | `TEAM_SYNC_MAX_STATUS_CHARS` | `700` | Maximale Länge eines fremden Standes im Kontext |
 | `TEAM_SYNC_MAX_FILES` | `12` | Wie viele Dateien ein Status auflistet |
 | `TEAM_SYNC_CACHE_SECONDS` | `60` | Gültigkeit des internen Cache für Name und Branch |
+| `TEAM_SYNC_PROJECT_DIR` | aus der Hook-Nutzlast | Projektordner, falls er nicht selbst gefunden wird |
+| `TEAM_SYNC_HOST` | wird erkannt | `claude` oder `antigravity`, falls die Erkennung danebenliegt |
+| `TEAM_SYNC_AG_EDIT_TOOLS` | – | Antigravity: Namen der schreibenden Werkzeuge, durch Komma getrennt. Ohne Angabe wird der Name geraten. |
+| `TEAM_SYNC_AG_START_SECONDS` | `43200` | Antigravity: ab wann eine Unterhaltung wieder als neu gilt |
+| `TEAM_SYNC_POSTFACH_SECONDS` | `900` | Antigravity: wie lange ein zurückgestellter Hinweis gültig bleibt |
 | `TEAM_SYNC_FORCE` | – | Auf `1` gesetzt umgeht der Zwischenstand die Drosselung. Zum Ausprobieren gedacht, nicht für den Dauerbetrieb. |
 
 Die `MAX_`-Werte begrenzen, was bei jedem Sessionstart an Tokens anfällt.
@@ -233,6 +265,12 @@ bis sich der Rest im Alltag bewährt hat.
 **Kein Erzwingen.** Die Hooks informieren, sie verhindern nicht, dass
 zwei Leute dieselbe Datei anfassen. Das bleibt Teamsache — das Werkzeug
 macht nur wahrscheinlicher, dass es rechtzeitig auffällt.
+
+**Keine Gleichbehandlung um jeden Preis.** Unter Antigravity kommt der
+Hinweis auf eine belegte Datei einen Schritt später als unter Claude
+Code, und der automatische Status ist dort etwas gröber. Warum das so
+ist und was es praktisch bedeutet, steht in
+[docs/ANTIGRAVITY.md](docs/ANTIGRAVITY.md).
 
 ---
 

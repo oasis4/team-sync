@@ -4,27 +4,36 @@
 
 ```
 .claude-plugin/     plugin.json und marketplace.json
-commands/           die Slash-Commands, je eine Markdown-Datei
-hooks/hooks.json    Verdrahtung der drei Hooks
+commands/           die Slash-Commands von Claude Code
+hooks/hooks.json    Verdrahtung der Hooks unter Claude Code
+antigravity/
+  rules/            Dauerregel für Antigravity
+  workflows/        dieselben fünf Befehle als Antigravity-Workflows
 scripts/
   lib/
     channel.py      git, Pfade, Namen, Sperre, Drosselung, Cache
+    host.py         Unterschiede zwischen Claude Code und Antigravity
     frontmatter.py  Kopffelder der Channel-Dateien
     render.py       Dateiformate und der Sessionstart-Kontext
     transcript.py   Auswertung des Sessiontranskripts
-    autostatus.py   gemeinsame Logik der beiden schreibenden Hooks
+    autostatus.py   gemeinsame Logik der schreibenden Hooks
     reservierung.py wer sitzt an welcher Datei
     anfrage.py      Klärung zwischen zwei Sessions
     empfang.py      der Rückkanal in laufende Sessions
-  session_start.py       SessionStart-Hook
+  session_start.py       SessionStart-Hook (Claude Code)
   session_checkpoint.py  Stop-Hook: Zwischenstand und Rückkanal
-  session_end.py         SessionEnd-Hook
+  session_end.py         SessionEnd-Hook (Claude Code)
+  antigravity_hook.py    PreInvocation, PostInvocation und Stop
   tool_pre_edit.py       PreToolUse-Hook, warnt vor belegten Dateien
   tool_post_edit.py      PostToolUse-Hook, reserviert beim ersten Zugriff
-  setup_channel.py       einmaliges Setup
+  setup_channel.py       einmaliges Setup des Channels
+  setup_antigravity.py   trägt das Plugin in Antigravity ein
   team_sync.py           die Kommandozeile hinter den Commands
 tests/              unittest, ohne externe Pakete
 ```
+
+Die beiden Werkzeug-Hooks laufen unter beiden Programmen. Sie enthalten
+keine Fallunterscheidung, weil die in `lib/host.py` steckt.
 
 ## Der heiße Pfad
 
@@ -52,6 +61,33 @@ stundenlang, ohne dass es jemand merkt.
 **Warten heißt nie Blockieren.** Wer auf eine belegte Datei stößt, legt
 eine Anfrage ab und arbeitet weiter. Jede Meldung, die zum Warten
 auffordert statt zum Weiterarbeiten, ist ein Fehler im Text.
+
+## Zwei Hostprogramme, eine Sachlogik
+
+`lib/host.py` ist die einzige Stelle, die weiß, welches Programm gerade
+läuft. Alles andere arbeitet mit dem normalisierten Ereignis aus
+`lies_ereignis()` und mit den Ausgabefunktionen daneben.
+
+Wer einen Hook anfasst, sollte deshalb nicht auf `tool_name` oder
+`hookSpecificOutput` zugreifen, sondern auf `daten.werkzeug`,
+`daten.datei` und `host.melde_kontext()`. Sonst entsteht ein Hook, der
+unter dem einen Programm funktioniert und unter dem anderen still nichts
+tut, und still nichts tun ist hier der teuerste Fehlermodus.
+
+Zwei Dinge sind an Antigravity anders und nicht verhandelbar:
+
+1. **Platzhalter werden nicht ersetzt.** In der dortigen `hooks.json`
+   stehen absolute Pfade, geschrieben von `setup_antigravity.py`. Wird
+   der Klon verschoben, zeigen sie ins Leere, und `doctor` sagt das.
+2. **Die Antwort auf `PreToolUse` ist genau `{"decision": "allow"}`.**
+   Ein zusätzliches Feld kann der Parser ablehnen. Der Hinweis auf eine
+   belegte Datei geht deshalb ins Postfach und wird beim nächsten
+   `PreInvocation` nachgereicht.
+
+Das Protokoll dort ist weniger festgeschrieben als das von Claude Code.
+Neuer Code auf dieser Seite gehört entsprechend nachgiebig gebaut:
+unbekannte Felder überspringen, fehlende als leer behandeln, im Zweifel
+nichts tun.
 
 ## Zwei Regeln, die alles andere bestimmen
 
@@ -117,7 +153,10 @@ Beispiel.
    einem Eintrag in `build_parser`.
 2. Format in `render.py` unterbringen, nicht im Handler.
 3. Slash-Command unter `commands/` anlegen, der es aufruft.
-4. Test in `tests/test_channel.py`.
+4. Denselben Workflow unter `antigravity/workflows/` anlegen, mit
+   `{{TEAM_SYNC_ROOT}}` statt `${CLAUDE_PLUGIN_ROOT}`. Ein Test wacht
+   darüber, dass beide Listen gleich bleiben.
+5. Test in `tests/test_channel.py`.
 
 ## Änderungen am Channel-Format
 

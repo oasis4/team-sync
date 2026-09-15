@@ -1,14 +1,19 @@
 """
 Der automatisch geschriebene Status.
 
-Gemeinsame Logik der beiden Hooks, die ungefragt schreiben: der
-Zwischenstand während einer laufenden Session (Stop) und der finale
-Status beim Beenden (SessionEnd). Beide erzeugen dieselbe Datei, sie
-unterscheiden sich nur im Anlass.
+Gemeinsame Logik der Hooks, die ungefragt schreiben: der Zwischenstand
+während einer laufenden Sitzung und der finale Status beim Beenden.
+Beide erzeugen dieselbe Datei, sie unterscheiden sich nur im Anlass.
+
+Unter Claude Code hängen diese Hooks an Stop und SessionEnd, unter
+Antigravity an PostInvocation und Stop. Was sie schreiben, ist
+identisch, sonst könnte der Channel nicht von beiden Seiten gelesen
+werden.
 """
 
 from .channel import (
     channel_is_ready,
+    gemerkte_dateien,
     get_agent_name,
     get_channel_dir,
     get_current_branch,
@@ -20,7 +25,7 @@ from .render import render_status
 from .transcript import summarize
 
 
-def schreibe_status(transcript_path, quelle, anlass=""):
+def schreibe_status(transcript_path, quelle, anlass="", werkzeug=""):
     """
     Schreibt den eigenen Status in den Channel.
 
@@ -39,6 +44,13 @@ def schreibe_status(transcript_path, quelle, anlass=""):
     zusammenfassung = summarize(transcript_path, project_dir)
     stamp = now_stamp()
 
+    # Zwei Quellen für die Dateiliste, in dieser Reihenfolge: das
+    # Transkript, weil es auch Dateien kennt, die vor dem Einrichten des
+    # Channels angefasst wurden, und sonst die eigene Mitschrift aus den
+    # Hooks. Die zweite hängt an keinem fremden Format und trägt den
+    # Status auch dann, wenn das Transkript unbekannt aufgebaut ist.
+    dateien = zusammenfassung["dateien"] or gemerkte_dateien(project_dir)
+
     inhalt = render_status(
         person=me,
         branch=branch,
@@ -46,7 +58,8 @@ def schreibe_status(transcript_path, quelle, anlass=""):
         quelle=quelle,
         auftrag=zusammenfassung["auftrag"],
         zuletzt=zusammenfassung["zuletzt"],
-        dateien=zusammenfassung["dateien"],
+        dateien=dateien,
+        werkzeug=werkzeug,
     )
 
     nachricht = f"status: {me} - {stamp}"

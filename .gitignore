@@ -16,3 +16,8 @@ Thumbs.db
 
 # Sitzungsdaten lokaler Werkzeuge
 .remember/
+
+# Von scripts/setup_antigravity.py angelegt, falls jemand das Plugin
+# in seinem eigenen Repo ausprobiert. Gehoert in das Projekt, in dem
+# gearbeitet wird, nicht hierher.
+.agents/

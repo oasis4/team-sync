@@ -5,6 +5,15 @@ Claude Code legt pro Session eine JSONL-Datei an, eine Zeile pro
 Ereignis. Daraus ziehen wir zwei Dinge: woran gearbeitet wird und
 welche Dateien angefasst wurden.
 
+Antigravity legt ebenfalls ein Transkript an, aber in einem anderen
+Format, und dieses Format ist nicht festgeschrieben. Deshalb gibt es
+hier zwei Wege: den genauen für Claude Code und einen nachgiebigen,
+der ein unbekanntes Transkript nach Nutzertext durchsucht, ohne eine
+bestimmte Struktur vorauszusetzen. Liefert auch der nichts, bleibt der
+Status eben dünner. Die Liste der angefassten Dateien hängt nicht am
+Transkript, sie kommt aus den eigenen Hooks (siehe channel.datei_merken),
+und ist deshalb unter beiden Programmen gleich verlässlich.
+
 Bewusst ohne zusätzlichen KI-Aufruf. Jeder Teammitglied bezahlt sein
 Kontingent selbst, und ein Hintergrundskript, das bei jedem
 Zwischenstand ungefragt Kontingent verbraucht, wäre ein schlechter
@@ -168,7 +177,143 @@ def summarize(transcript_path, project_dir=None):
         # zu lassen. Dann gibt es diesmal eben einen dünneren Status.
         pass
 
+    if not first:
+        # Kein Treffer im Claude-Code-Format. Entweder war die Datei
+        # leer, oder sie stammt aus einem anderen Programm. Der zweite
+        # Weg setzt keine Struktur voraus.
+        first, last = _generischer_text(path)
+
     result["auftrag"] = first[:MAX_TOPIC_CHARS]
     result["zuletzt"] = last[:MAX_TOPIC_CHARS] if last != first else ""
     result["dateien"] = sorted(files)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Nachgiebiger Weg für fremde Transkriptformate
+# ---------------------------------------------------------------------------
+
+# Werte des Typ- oder Rollenfeldes, die eine Nutzeräußerung ankündigen.
+# Antigravity kennt unter anderem USER_MESSAGE neben PLANNER_RESPONSE;
+# aufgenommen sind hier auch die Schreibweisen anderer Werkzeuge, denn
+# ein zusätzlicher Eintrag kostet nichts und ein fehlender kostet den
+# halben Status.
+NUTZER_TYPEN = {
+    "user", "usermessage", "userturn", "userinput", "userrequest",
+    "human", "humanmessage", "humanturn", "input", "prompt",
+}
+
+# Felder, in denen der Text einer solchen Äußerung stehen kann.
+TEXT_FELDER = ("text", "content", "message", "prompt", "usermessage", "query", "value")
+
+MAX_GENERISCHE_TIEFE = 4
+
+
+def _normalisiere(name) -> str:
+    return "".join(c for c in str(name).lower() if c.isalnum())
+
+
+def _text_aus(wert, tiefe=0) -> str:
+    """Zieht lesbaren Text aus einem beliebig verschachtelten Wert."""
+    if tiefe > MAX_GENERISCHE_TIEFE:
+        return ""
+
+    if isinstance(wert, str):
+        return _clean_text(wert)
+
+    if isinstance(wert, dict):
+        for feld in TEXT_FELDER:
+            for schluessel, inhalt in wert.items():
+                if _normalisiere(schluessel) == feld:
+                    text = _text_aus(inhalt, tiefe + 1)
+                    if text:
+                        return text
+        return ""
+
+    if isinstance(wert, list):
+        teile = [_text_aus(eintrag, tiefe + 1) for eintrag in wert[:20]]
+        return _clean_text(" ".join(teil for teil in teile if teil))
+
+    return ""
+
+
+def _ist_nutzereintrag(eintrag) -> bool:
+    for schluessel in ("type", "role", "kind", "eventType", "author", "sender"):
+        wert = eintrag.get(schluessel)
+        if isinstance(wert, str) and _normalisiere(wert) in NUTZER_TYPEN:
+            return True
+    return False
+
+
+def _eintraege_lesen(path):
+    """
+    Liest ein Transkript als Liste von Einträgen.
+
+    Deckt beide gängigen Formen ab: eine JSON-Zeile pro Ereignis und ein
+    einzelnes JSON-Dokument mit einer Liste darin. Welche davon vorliegt,
+    gehört dem Hostprogramm und kann sich ändern, deshalb wird nicht
+    gefragt, sondern beides versucht.
+    """
+    eintraege = []
+    try:
+        roh = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return eintraege
+
+    zeilen = roh.splitlines()
+    for nummer, zeile in enumerate(zeilen):
+        if nummer > MAX_LINES:
+            break
+        zeile = zeile.strip()
+        if not zeile.startswith(("{", "[")):
+            continue
+        try:
+            geparst = json.loads(zeile)
+        except Exception:
+            continue
+        if isinstance(geparst, dict):
+            eintraege.append(geparst)
+        elif isinstance(geparst, list):
+            eintraege.extend(e for e in geparst if isinstance(e, dict))
+
+    if eintraege:
+        return eintraege
+
+    # Kein zeilenweises Format: das Ganze als ein Dokument versuchen.
+    try:
+        geparst = json.loads(roh)
+    except Exception:
+        return eintraege
+
+    if isinstance(geparst, list):
+        return [e for e in geparst if isinstance(e, dict)]
+    if isinstance(geparst, dict):
+        for wert in geparst.values():
+            if isinstance(wert, list) and any(isinstance(e, dict) for e in wert):
+                return [e for e in wert if isinstance(e, dict)]
+    return eintraege
+
+
+def _generischer_text(path):
+    """
+    Sucht die erste und die letzte Nutzeräußerung in einem beliebigen
+    Transkript.
+
+    Rückgabe: (erste, letzte). Findet sich nichts, zweimal "". Der
+    Status ist dann dünner, aber er entsteht trotzdem, und die Liste der
+    angefassten Dateien und der Zeitstempel stimmen weiterhin.
+    """
+    erste = ""
+    letzte = ""
+
+    for eintrag in _eintraege_lesen(path):
+        if not _ist_nutzereintrag(eintrag):
+            continue
+        text = _text_aus(eintrag)
+        if _is_noise(text):
+            continue
+        if not erste:
+            erste = text
+        letzte = text
+
+    return erste, letzte

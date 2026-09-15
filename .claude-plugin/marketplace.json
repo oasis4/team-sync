@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "Marketplace für das team-sync Plugin",
-    "version": "0.3.0"
+    "version": "0.4.0"
   },
   "plugins": [
     {
       "name": "team-sync",
       "source": "./",
-      "description": "Status, offene Fragen und Entscheidungen zwischen Teammitgliedern teilen, über einen eigenen Git-Branch"
+      "description": "Status, offene Fragen und Entscheidungen zwischen Teammitgliedern teilen, über einen eigenen Git-Branch. Auch mit Antigravity im selben Team."
     }
   ]
 }

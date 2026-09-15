@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import empfang
 from lib.autostatus import schreibe_status
+from lib.host import CLAUDE, LABELS
 from lib.channel import (
     channel_is_ready,
     get_agent_name,
@@ -82,6 +83,7 @@ def main():
                 hook_input.get("transcript_path", ""),
                 quelle="zwischenstand",
                 anlass="automatisch",
+                werkzeug=LABELS[CLAUDE],
             )
 
             # Marker nur setzen, wenn wirklich geschrieben wurde. Sonst

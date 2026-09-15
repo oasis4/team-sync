@@ -180,6 +180,58 @@ die laufende Arbeit; ob das genügt, muss sich zeigen.
 
 ---
 
+## Nachtrag: ein zweites Hostprogramm (0.4.0)
+
+Die erste Fassung setzte voraus, dass alle im Team Claude Code benutzen.
+Das war nie eine Eigenschaft des Entwurfs, sondern eine Eigenschaft der
+Hooks: Der Kanal ist ein Git-Branch mit Markdown darin, und dem ist
+gleich, wer ihn beschreibt. Trotzdem stand in jedem Hook-Skript ein
+Nutzlastformat und ein Antwortformat fest verdrahtet.
+
+Die Annahme kippt bei der ersten Person, die mit etwas anderem arbeitet.
+Genau das war der Anlass: eine Person mit Antigravity, zwei mit Claude
+Code, ein Repository.
+
+### Warum eine Abstraktion und kein zweites Plugin
+
+Ein eigenständiges Antigravity-Plugin wäre schneller fertig gewesen und
+hätte sich binnen Monaten auseinanderentwickelt. Zwei Fassungen desselben
+Dateiformats, die sich langsam auseinanderbewegen, sind für einen
+geteilten Kanal die schlimmste aller Varianten: Es funktioniert, bis es
+still nicht mehr funktioniert.
+
+Deshalb eine einzige Stelle, `lib/host.py`, die beide Protokolle
+übersetzt, und darunter unveränderte Sachlogik. Ein Statuseintrag aus
+Antigravity ist für Claude Code kein Sonderfall, sondern ein ganz
+gewöhnlicher Statuseintrag.
+
+### Warum die Dateiliste aus den eigenen Hooks kommt
+
+Der automatische Status brauchte zwei Angaben, und beide kamen aus dem
+Transkript. Dessen Format gehört aber dem Hostprogramm. Für Claude Code
+ist es dokumentiert und stabil, anderswo nicht.
+
+Die Liste der angefassten Dateien lässt sich ohne das Transkript
+gewinnen, denn der Reservierungs-Hook sieht ohnehin jede Datei, sobald
+sie angefasst wird. Damit hängt nur noch der Freitext an einem fremden
+Format, und wenn der fehlt, ist der Status dünner statt falsch.
+
+### Der Preis, den die Abstraktion nicht abfängt
+
+Antigravity erwartet vor einem Werkzeugaufruf eine Antwort mit genau
+einem Feld. Einen Hinweistext gibt es dort nicht, und ein zusätzliches
+Feld kann der Parser ablehnen. Abgelehnte Hook-Antworten haben in
+anderen Projekten dazu geführt, dass jeder Werkzeugaufruf verweigert
+wurde, und das ist genau der Fehlermodus, den dieses Plugin um jeden
+Preis vermeiden will.
+
+Der Hinweis wird deshalb zurückgestellt und beim nächsten Modellaufruf
+nachgereicht. Er kommt damit einen Schritt zu spät, also erst nach dem
+ersten Edit. Gemessen an der Alternative, einer Sitzung, die bei jedem
+Werkzeugaufruf abgewiesen wird, ist das kein schwerer Handel.
+
+---
+
 ## Bewusste Grenzen
 
 **Kein Echtzeit-Chat.** Zwei gleichzeitig laufende Sessions reden nicht

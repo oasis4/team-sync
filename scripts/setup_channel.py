@@ -43,8 +43,9 @@ Dieser Branch enthält keinen Code.
 
 Er trägt den geteilten Arbeitsstand des Teams: wer gerade woran
 arbeitet, welche Fragen offen sind und welche Architekturentscheidungen
-getroffen wurden. Geschrieben und gelesen wird das vom Claude-Code-Plugin
-[team-sync](https://github.com/oasis4/team-sync).
+getroffen wurden. Geschrieben und gelesen wird das vom Plugin
+[team-sync](https://github.com/oasis4/team-sync), aus Claude Code oder
+aus Antigravity.
 
 - `status/` eine Datei pro Person, automatisch aktualisiert
 - `questions/` eine Datei pro Frage, angelegt mit `/ask`, beantwortet mit `/answer`
@@ -143,7 +144,12 @@ def fuelle_struktur(channel_dir: Path):
     # geraten, sonst streiten sich zwei Rechner um dieselbe Datei.
     write_text_lf(
         channel_dir / ".gitignore",
-        "team-sync.lock\n.team-sync.lock\nteam-sync-cache.json\n",
+        "team-sync.lock\n"
+        ".team-sync.lock\n"
+        "team-sync-cache.json\n"
+        "team-sync-postfach.json\n"
+        "team-sync-dateien.json\n"
+        "team-sync-antigravity.json\n",
     )
 
 

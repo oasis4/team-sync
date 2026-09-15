@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib import reservierung
 from lib.autostatus import schreibe_status
+from lib.host import CLAUDE, LABELS
 from lib.channel import (
     channel_is_ready,
     get_agent_name,
@@ -49,6 +50,7 @@ def main():
             hook_input.get("transcript_path", ""),
             quelle="sessionende",
             anlass=anlass,
+            werkzeug=LABELS[CLAUDE],
         )
 
         project_dir = get_project_dir()

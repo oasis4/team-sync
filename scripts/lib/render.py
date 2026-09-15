@@ -39,19 +39,26 @@ MAX_FILES_LISTED = int(os.environ.get("TEAM_SYNC_MAX_FILES", "12"))
 
 
 def render_status(person, branch, stamp, quelle, auftrag="", zuletzt="",
-                  dateien=None, freitext=""):
+                  dateien=None, freitext="", werkzeug=""):
     """
     Baut eine Statusdatei.
 
     quelle unterscheidet, wie der Status entstanden ist:
       zwischenstand  automatisch während laufender Session
       sessionende    automatisch beim Beenden
-      manuell        von Claude über /sync formuliert
+      manuell        vom Agenten über /sync formuliert
 
     Das steht bewusst in der Datei, denn ein automatischer Zwischenstand
     ist eine grobe Heuristik, ein /sync-Status eine echte
     Zusammenfassung. Wer den Channel liest, sollte den Unterschied
     sehen können.
+
+    werkzeug nennt das Programm, aus dem der Status kommt, etwa
+    "Claude Code" oder "Antigravity". Das ist keine Statistik: Wer
+    sieht, dass eine Reservierung aus einem anderen Programm stammt,
+    ordnet eine träge oder fehlende Meldung richtig ein, statt sie für
+    einen Fehler zu halten. Das Feld ist optional, ein Status ohne es
+    bleibt gültig.
     """
     dateien = dateien or []
 
@@ -62,6 +69,8 @@ def render_status(person, branch, stamp, quelle, auftrag="", zuletzt="",
         "branch": branch,
         "quelle": quelle,
     }
+    if werkzeug:
+        fields["werkzeug"] = werkzeug
 
     lines = [f"# Status: {person}", ""]
 
@@ -100,6 +109,7 @@ def read_status(path):
         "aktualisiert": frontmatter.get(fields, "aktualisiert"),
         "branch": frontmatter.get(fields, "branch"),
         "quelle": frontmatter.get(fields, "quelle"),
+        "werkzeug": frontmatter.get(fields, "werkzeug"),
         "body": body.strip(),
         "path": path,
     }
@@ -267,6 +277,7 @@ def build_context(channel_dir, me: str) -> str:
             lines.append(
                 f"Branch `{entry['branch'] or 'unbekannt'}`"
                 + (f", zuletzt aktiv {age}" if age else "")
+                + (f", arbeitet mit {entry['werkzeug']}" if entry["werkzeug"] else "")
             )
             lines.append("")
             lines.append(_truncate(_ohne_ueberschrift(entry["body"]), MAX_STATUS_CHARS))
@@ -329,10 +340,13 @@ def build_overview(channel_dir, me: str) -> str:
             selbst = " (du)" if slugify(entry["person"]) == slugify(me) else ""
             marker = " — veraltet" if is_stale(entry["aktualisiert"]) else ""
             age = describe_age(entry["aktualisiert"])
+            herkunft = entry["quelle"] or "unbekannt"
+            if entry["werkzeug"]:
+                herkunft += f", {entry['werkzeug']}"
             lines.append(
                 f"- **{entry['person']}**{selbst}: Branch `{entry['branch'] or '?'}`, "
                 f"{age or entry['aktualisiert'] or 'ohne Zeitstempel'}"
-                f"{marker} [{entry['quelle'] or 'unbekannt'}]"
+                f"{marker} [{herkunft}]"
             )
         lines.append("")
     else:

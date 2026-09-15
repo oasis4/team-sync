@@ -555,9 +555,11 @@ def _antigravity_pruefen(ctx, probleme):
     """
     from pathlib import Path as _Path
 
+    from lib.host import gemini_config_dir
+
     kandidaten = [
         ctx.project_dir / ".agents" / "hooks.json",
-        _Path.home() / ".gemini" / "config" / "hooks.json",
+        gemini_config_dir() / "hooks.json",
     ]
 
     gefunden = []
@@ -597,10 +599,14 @@ def _antigravity_pruefen(ctx, probleme):
                     )
                     if not treffer:
                         continue
-                    skript = _Path(treffer.group(1))
-                    if not skript.is_file():
+                    # Den Pfad so ausgeben, wie er in der Datei steht, nicht
+                    # wie Path ihn normalisiert. Unter Windows wuerde aus
+                    # /gibt/es/nicht ein \\gibt\\es\\nicht, und wer danach in
+                    # seiner hooks.json sucht, findet nichts.
+                    roh = treffer.group(1)
+                    if not _Path(roh).is_file():
                         probleme.append(
-                            f"Der Hook in {pfad} zeigt auf {skript}, dort liegt nichts. "
+                            f"Der Hook in {pfad} zeigt auf {roh}, dort liegt nichts. "
                             f"Nach einem Verschieben des Plugins hilft "
                             f"'python3 scripts/setup_antigravity.py' erneut."
                         )

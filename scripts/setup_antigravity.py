@@ -45,6 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lib.channel import run_git, setup_stdio, write_text_lf
+from lib.host import gemini_config_dir
 
 WURZEL = Path(__file__).resolve().parent.parent
 
@@ -56,7 +57,6 @@ GRUPPE = "team-sync"
 # Platzhalter in den mitgelieferten Regeln und Workflows.
 PLATZHALTER = "{{TEAM_SYNC_ROOT}}"
 
-GLOBALER_ORDNER = Path.home() / ".gemini" / "config"
 
 
 def hooks_bauen(python_befehl: str) -> dict:
@@ -311,7 +311,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.global_:
-        ziel = GLOBALER_ORDNER
+        ziel = gemini_config_dir()
     elif args.dir:
         ziel = Path(args.dir).expanduser().resolve() / ".agents"
     else:

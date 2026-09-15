@@ -55,6 +55,20 @@ Reservierungen und bekommt dieselben Meldungen.
   Antigravity gibt es kein Gegenstück, der Projektordner kommt dort aus
   der Hook-Nutzlast.
 
+### Behoben
+
+- **Zwei Tests hingen am echten Benutzerverzeichnis.** Die globale
+  Einrichtung liegt unter `~/.gemini/config`, und die Tests dazu haben
+  genau dort gelesen und geschrieben. Unter Windows hat das Verbiegen
+  von `HOME` nichts genützt, weil `Path.home()` dort `USERPROFILE`
+  liest, und der Testlauf hat die tatsächliche Konfiguration des
+  Entwicklers angefasst. Der Ort ist jetzt über `TEAM_SYNC_GEMINI_DIR`
+  umlenkbar, und die Testumgebung setzt ihn immer.
+- **`doctor` hat unter Windows den falschen Pfad gemeldet.** Ein Hook,
+  der auf `/gibt/es/nicht/x.py` zeigt, wurde als `\gibt\es\nicht\x.py`
+  ausgegeben. Wer damit in seiner `hooks.json` sucht, findet nichts.
+  Gemeldet wird jetzt, was dort wirklich steht.
+
 ### Bekannte Grenzen
 
 - Unter Antigravity kommt der Hinweis auf eine belegte Datei einen

@@ -72,6 +72,10 @@ stehen absolute Pfade.
 | `--dry-run` | Zeigt nur, was passieren würde |
 | `--entfernen` | Nimmt alles wieder heraus |
 
+Liegt die rechnerweite Konfiguration bei dir nicht unter
+`~/.gemini/config`, sag es über `TEAM_SYNC_GEMINI_DIR`. Sowohl
+`--global` als auch `doctor` richten sich danach.
+
 `--global` ist bequem und trotzdem nicht die Vorgabe. Die Hooks laufen
 dann auch in Repositories ohne Channel. Schaden tun sie dort nicht, sie
 steigen sofort wieder aus, aber jeder Modellaufruf kostet einen

@@ -135,13 +135,18 @@ class TestEinrichten(AntigravitySetupTestCase):
         self.assertNotIn("nicht ins Repository", ergebnis.stdout)
 
     def test_kein_hinweis_bei_global(self):
-        """Ausserhalb eines Projekts gibt es nichts mitzucommitten."""
-        zuhause = self.basis / "zuhause"
-        zuhause.mkdir()
-        ergebnis = self.setup_ag("--global", extra={"HOME": str(zuhause)})
+        """
+        Ausserhalb eines Projekts gibt es nichts mitzucommitten.
+
+        Das Ziel kommt aus TEAM_SYNC_GEMINI_DIR, gesetzt von der
+        Testumgebung. HOME zu verbiegen genuegt nicht: Unter Windows
+        liest Path.home() USERPROFILE, und der Test hat dort in das
+        echte Benutzerverzeichnis geschrieben.
+        """
+        ergebnis = self.setup_ag("--global")
         self.assertErfolg(ergebnis)
         self.assertNotIn("nicht ins Repository", ergebnis.stdout)
-        self.assertTrue((zuhause / ".gemini" / "config" / "hooks.json").is_file())
+        self.assertTrue((self.basis / "gemini-config" / "hooks.json").is_file())
 
     def test_zweimal_ausfuehren_bleibt_gleich(self):
         self.assertErfolg(self.setup_ag())
@@ -240,6 +245,9 @@ class TestDoctor(AntigravitySetupTestCase):
 
         ergebnis = self.team.cli("Anna", "doctor")
         self.assertEqual(ergebnis.returncode, 1)
+        # Der Pfad muss so dastehen wie in der hooks.json, sonst sucht
+        # man ihn dort vergeblich. Unter Windows hat doctor ihn frueher
+        # zu \\gibt\\es\\nicht normalisiert.
         self.assertIn("/gibt/es/nicht/antigravity_hook.py", ergebnis.stdout)
 
 

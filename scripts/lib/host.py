@@ -91,6 +91,33 @@ POSTFACH_GUELTIG = int(os.environ.get("TEAM_SYNC_POSTFACH_SECONDS", "900"))
 
 
 # ---------------------------------------------------------------------------
+# Wo Antigravity seine globale Konfiguration hat
+# ---------------------------------------------------------------------------
+
+
+def gemini_config_dir():
+    """
+    Der Ordner, in dem Antigravity seine rechnerweite Konfiguration hält.
+
+    Normalerweise ~/.gemini/config. Überschreibbar über
+    TEAM_SYNC_GEMINI_DIR, aus zwei Gründen. Erstens liegt der Ordner
+    nicht auf jedem System dort. Zweitens, und wichtiger: Ohne diesen
+    Schalter müsste die Testsuite in das echte Benutzerverzeichnis
+    schreiben, um die globale Einrichtung zu prüfen. Ein Testlauf, der
+    die tatsächliche Antigravity-Konfiguration seines Entwicklers
+    anfasst, ist ein Fehler, den man erst bemerkt, wenn er schon
+    passiert ist.
+    """
+    override = os.environ.get("TEAM_SYNC_GEMINI_DIR")
+    if override:
+        try:
+            return Path(override).expanduser()
+        except Exception:
+            pass
+    return Path.home() / ".gemini" / "config"
+
+
+# ---------------------------------------------------------------------------
 # Eingabe
 # ---------------------------------------------------------------------------
 

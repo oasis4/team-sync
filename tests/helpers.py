@@ -84,6 +84,12 @@ class TeamUmgebung:
         env["GIT_AUTHOR_EMAIL"] = f"{name.lower()}@example.test"
         env["GIT_COMMITTER_NAME"] = name
         env["GIT_COMMITTER_EMAIL"] = f"{name.lower()}@example.test"
+        # Die globale Antigravity-Konfiguration liegt sonst unter
+        # ~/.gemini/config. Ein Testlauf, der das echte
+        # Benutzerverzeichnis liest oder gar beschreibt, haengt am
+        # Rechner des Entwicklers und kann dessen Einrichtung anfassen.
+        # Deshalb zeigt sie hier immer in die Testablage.
+        env["TEAM_SYNC_GEMINI_DIR"] = str(self.basis / "gemini-config")
         env.pop("TEAM_SYNC_CHANNEL_DIR", None)
         if extra:
             env.update(extra)

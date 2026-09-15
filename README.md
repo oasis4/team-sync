@@ -280,6 +280,7 @@ Alles optional, per Umgebungsvariable:
 | `TEAM_SYNC_PROJECT_DIR` | aus der Hook-Nutzlast | Projektordner, falls er nicht selbst gefunden wird |
 | `TEAM_SYNC_HOST` | wird erkannt | `claude` oder `antigravity`, falls die Erkennung danebenliegt |
 | `TEAM_SYNC_AG_EDIT_TOOLS` | – | Antigravity: Namen der schreibenden Werkzeuge, durch Komma getrennt. Ohne Angabe wird der Name geraten. |
+| `TEAM_SYNC_GEMINI_DIR` | `~/.gemini/config` | Antigravity: wo die rechnerweite Konfiguration liegt, für `--global` und für `doctor` |
 | `TEAM_SYNC_AG_START_SECONDS` | `43200` | Antigravity: ab wann eine Unterhaltung wieder als neu gilt |
 | `TEAM_SYNC_POSTFACH_SECONDS` | `900` | Antigravity: wie lange ein zurückgestellter Hinweis gültig bleibt |
 | `TEAM_SYNC_FORCE` | – | Auf `1` gesetzt umgeht der Zwischenstand die Drosselung. Zum Ausprobieren gedacht, nicht für den Dauerbetrieb. |

@@ -34,7 +34,7 @@ class AntigravitySetupTestCase(TeamTestCase):
         self.projekt = self.team.projekte["Anna"]
         self.agents = self.projekt / ".agents"
 
-    def setup_ag(self, *args):
+    def setup_ag(self, *args, extra=None):
         return subprocess.run(
             [sys.executable, str(SCRIPTS / "setup_antigravity.py")] + list(args),
             cwd=str(self.projekt),
@@ -42,7 +42,7 @@ class AntigravitySetupTestCase(TeamTestCase):
             text=True,
             encoding="utf-8",
             errors="replace",
-            env=self.team.umgebung("Anna"),
+            env=self.team.umgebung("Anna", extra),
         )
 
     def hooks(self):
@@ -116,6 +116,32 @@ class TestEinrichten(AntigravitySetupTestCase):
         ziel.mkdir()
         self.assertErfolg(self.setup_ag("--dir", str(ziel)))
         self.assertTrue((ziel / ".agents" / "hooks.json").is_file())
+
+    def test_erinnert_an_die_gitignore(self):
+        """
+        In den geschriebenen Dateien stehen absolute Pfade. Landen sie im
+        Repository, zeigen sie bei der nächsten Person ins Leere, und
+        ihre Hooks tun still nichts.
+        """
+        ergebnis = self.setup_ag()
+        self.assertErfolg(ergebnis)
+        self.assertIn(".agents/", ergebnis.stdout)
+        self.assertIn("nicht ins Repository", ergebnis.stdout)
+
+    def test_kein_hinweis_wenn_schon_eingetragen(self):
+        (self.projekt / ".gitignore").write_text(".agents/\n", encoding="utf-8")
+        ergebnis = self.setup_ag()
+        self.assertErfolg(ergebnis)
+        self.assertNotIn("nicht ins Repository", ergebnis.stdout)
+
+    def test_kein_hinweis_bei_global(self):
+        """Ausserhalb eines Projekts gibt es nichts mitzucommitten."""
+        zuhause = self.basis / "zuhause"
+        zuhause.mkdir()
+        ergebnis = self.setup_ag("--global", extra={"HOME": str(zuhause)})
+        self.assertErfolg(ergebnis)
+        self.assertNotIn("nicht ins Repository", ergebnis.stdout)
+        self.assertTrue((zuhause / ".gemini" / "config" / "hooks.json").is_file())
 
     def test_zweimal_ausfuehren_bleibt_gleich(self):
         self.assertErfolg(self.setup_ag())

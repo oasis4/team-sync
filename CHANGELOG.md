@@ -33,6 +33,10 @@ Reservierungen und bekommt dieselben Meldungen.
   welchem Programm arbeitet. Eine Lesehilfe, keine Statistik: Eine
   Reservierung aus einem anderen Werkzeug kann träger sein, und das soll
   niemand für einen Fehler halten.
+- `setup_antigravity.py` erinnert daran, `.agents/` in die `.gitignore`
+  des Projekts zu setzen. In den geschriebenen Dateien stehen absolute
+  Pfade; landen sie im Repository, zeigen sie bei der nächsten Person
+  ins Leere und ihre Hooks tun still nichts.
 - `doctor` berichtet, ob und wo die Antigravity-Seite eingetragen ist,
   und meldet Hooks, die ins Leere zeigen. Das passiert, sobald der Klon
   verschoben wird, denn dort stehen absolute Pfade.

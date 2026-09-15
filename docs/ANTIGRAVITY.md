@@ -40,6 +40,17 @@ Geschrieben wird in den Projektordner:
 └── workflows/          team, ask, answer, decide, sync
 ```
 
+In diesen Dateien stehen absolute Pfade zu deinem Klon. Sie gehören
+deshalb nicht ins Repository, sonst zeigen sie auf dem Rechner der
+nächsten Person ins Leere und ihre Hooks tun still nichts. Einmal
+eintragen:
+
+```bash
+echo ".agents/" >> .gitignore
+```
+
+Das Skript erinnert daran, wenn der Eintrag fehlt.
+
 Prüfen:
 
 ```bash

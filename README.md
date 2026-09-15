@@ -94,9 +94,36 @@ zu oft danebenliegt, wird nach dem dritten Mal überlesen.
 
 ## Installation
 
-### 1. Plugin installieren
+Drei Schritte. Die ersten beiden sind für alle gleich, im dritten
+unterscheidet sich, womit du arbeitest.
 
-In Claude Code:
+### 1. Dieses Repo klonen
+
+```bash
+git clone https://github.com/oasis4/team-sync.git ~/werkzeuge/team-sync
+```
+
+Der Klon bleibt liegen, die Hooks rufen die Skripte von dort auf. Wer
+ihn später verschiebt, führt Schritt 3 noch einmal aus.
+
+### 2. Channel einrichten
+
+Einmal pro Person und Projekt, im Projekt-Repo ausgeführt:
+
+```bash
+cd /pfad/zu/deinem/projekt
+python3 ~/werkzeuge/team-sync/scripts/setup_channel.py
+```
+
+Die erste Person legt damit den Branch `team-channel` an, alle weiteren
+checken ihn nur noch aus. Daneben entsteht ein Ordner
+`<projekt>-channel`, das ist der Worktree, in dem die Notizen liegen.
+
+### 3. Das eigene Programm einrichten
+
+#### Claude Code
+
+In der laufenden Session:
 
 ```
 /plugin marketplace add oasis4/team-sync
@@ -106,49 +133,76 @@ In Claude Code:
 /plugin install team-sync@team-sync-marketplace
 ```
 
-### 2. Channel einrichten
+Danach eine neue Session starten. Hooks und Slash-Commands sind damit
+verdrahtet.
 
-Einmal pro Person und Projekt. Das Setup-Skript hängt nicht am Plugin,
-es braucht nur git — am einfachsten aus einem Klon dieses Repos, im
-Projekt-Repo ausgeführt:
+#### Antigravity
+
+Antigravity kennt das Pluginformat von Claude Code nicht, es liest
+Hooks, Regeln und Workflows aus eigenen Dateien. Ein Skript legt sie an,
+im Projekt ausgeführt:
 
 ```bash
-git clone https://github.com/oasis4/team-sync.git ~/werkzeuge/team-sync
+cd /pfad/zu/deinem/projekt
+python3 ~/werkzeuge/team-sync/scripts/setup_antigravity.py
 ```
+
+Das schreibt in den Projektordner:
+
+```
+.agents/
+├── hooks.json          Gruppe "team-sync", verweist auf den Klon aus Schritt 1
+├── rules/team-sync.md  Dauerregel, erklärt dem Agenten den Channel
+└── workflows/          team, ask, answer, decide, sync
+```
+
+Danach **Antigravity einmal neu starten**, sonst greifen die Hooks nicht.
+
+Eine bestehende `hooks.json` wird nicht überschrieben. Das Skript liest
+sie ein, legt eine Sicherungskopie daneben und ergänzt nur die eigene
+Gruppe. Ist sie kein lesbares JSON, bricht es ab und ändert nichts.
+
+**Wichtig für die Zusammenarbeit:** In diesen Dateien stehen absolute
+Pfade zu deinem Klon. Sie gehören deshalb nicht ins Repository, sonst
+zeigen sie auf dem Rechner der nächsten Person ins Leere. Trag den
+Ordner einmal in die `.gitignore` deines Projekts ein:
 
 ```bash
-cd /pfad/zu/deinem/projekt && python3 ~/werkzeuge/team-sync/scripts/setup_channel.py
+echo ".agents/" >> .gitignore
 ```
 
-Die erste Person legt damit den Branch `team-channel` an, alle weiteren
-checken ihn nur noch aus. Danach läuft alles automatisch.
+Wer das nicht will, nimmt stattdessen `--global`. Dann landet alles
+unter `~/.gemini/config/` und gilt für alle Projekte, auch für die ohne
+Channel. Dort steigen die Hooks sofort wieder aus, es kostet nur einen
+Prozessstart pro Modellaufruf.
 
-Prüfen, ob es sitzt:
+Weitere Optionen von `setup_antigravity.py`:
+
+| Option | Wirkung |
+|---|---|
+| `--global` | Nach `~/.gemini/config/` statt in den Projektordner |
+| `--dir <pfad>` | Anderer Ort für den `.agents`-Ordner |
+| `--python <befehl>` | Anderer Python-Aufruf in den Hooks, etwa `py -3` |
+| `--dry-run` | Zeigt nur, was passieren würde |
+| `--entfernen` | Nimmt alles wieder heraus |
+
+Wie die Ereignisse zugeordnet sind und wo die Grenzen liegen, steht in
+[docs/ANTIGRAVITY.md](docs/ANTIGRAVITY.md).
+
+### Prüfen, ob es sitzt
 
 ```bash
 python3 ~/werkzeuge/team-sync/scripts/team_sync.py doctor
 ```
 
-Wer lieber das installierte Plugin nutzt: Es liegt unter
-`~/.claude/plugins/marketplaces/`, der genaue Ordnername steht in
-`~/.claude/plugins/installed_plugins.json`.
+Der Bericht nennt Channel, Remote, den eigenen Namen und am Ende den
+Stand der Antigravity-Seite. Zeigt ein Hook auf eine Datei, die es nicht
+gibt, steht das dort als Problem. Genau das passiert, wenn der Klon aus
+Schritt 1 verschoben wurde.
 
-### 3. Nur für Antigravity
-
-Antigravity kennt das Pluginformat von Claude Code nicht, es liest seine
-Erweiterungen aus eigenen Dateien. Ein Skript legt sie an, im Projekt
-ausgeführt:
-
-```bash
-cd /pfad/zu/deinem/projekt && python3 ~/werkzeuge/team-sync/scripts/setup_antigravity.py
-```
-
-Danach Antigravity einmal neu starten. Was dabei geschrieben wird, wie
-die Ereignisse zugeordnet sind und wo die Grenzen liegen, steht in
-[docs/ANTIGRAVITY.md](docs/ANTIGRAVITY.md).
-
-Wer nur mit Claude Code arbeitet, überspringt diesen Schritt. Das Plugin
-funktioniert ohne ihn unverändert.
+Wer lieber das über `/plugin` installierte Plugin statt des Klons nutzt:
+Es liegt unter `~/.claude/plugins/marketplaces/`, der genaue Ordnername
+steht in `~/.claude/plugins/installed_plugins.json`.
 
 ### Voraussetzungen
 
@@ -159,8 +213,9 @@ funktioniert ohne ihn unverändert.
 Keine Pakete zu installieren, das Plugin nutzt nur die
 Standardbibliothek.
 
-Heißt der Python-Befehl bei dir `python` statt `python3`, passe die drei
-Zeilen in [hooks/hooks.json](hooks/hooks.json) entsprechend an.
+Heißt der Python-Befehl bei dir `python` statt `python3`: Unter Claude
+Code passt du die Zeilen in [hooks/hooks.json](hooks/hooks.json) an,
+unter Antigravity übergibst du `--python python` beim Einrichten.
 
 ---
 

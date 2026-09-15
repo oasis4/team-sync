@@ -250,6 +250,39 @@ def texte_schreiben(quelle: Path, ziel: Path, entfernen: bool, probelauf: bool):
     return erfolg
 
 
+def _gitignore_hinweis(ziel: Path):
+    """
+    Erinnert daran, den .agents-Ordner nicht mitzucommitten.
+
+    In den geschriebenen Dateien stehen absolute Pfade zu diesem Klon.
+    Landen sie im Repository, zeigen sie auf dem Rechner der nächsten
+    Person ins Leere, und ihre Hooks tun still nichts. Das ist genau die
+    Sorte Fehler, die niemand sucht, weil nichts knallt.
+
+    Nur ein Hinweis. Die .gitignore gehört dem Projekt, nicht uns.
+    """
+    if ziel.name != ".agents":
+        return
+
+    projekt = ziel.parent
+    gitignore = projekt / ".gitignore"
+    try:
+        if gitignore.is_file():
+            zeilen = {
+                zeile.strip().rstrip("/")
+                for zeile in gitignore.read_text(encoding="utf-8").splitlines()
+            }
+            if ".agents" in zeilen:
+                return
+    except Exception:
+        return
+
+    print()
+    print("Hinweis: In den Dateien stehen absolute Pfade zu diesem Klon.")
+    print("Sie gehören nicht ins Repository. Einmal eintragen:")
+    print(f'  echo ".agents/" >> "{gitignore}"')
+
+
 def main() -> int:
     setup_stdio()
 
@@ -327,6 +360,9 @@ def main() -> int:
         return 0
 
     print("Fertig. Antigravity einmal neu starten, damit die Hooks greifen.")
+
+    _gitignore_hinweis(ziel)
+
     print()
     print("Noch nötig, falls nicht schon geschehen:")
     print("  python3 " + str(WURZEL / "scripts" / "setup_channel.py"))

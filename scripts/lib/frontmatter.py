@@ -85,16 +85,37 @@ def get(fields, key: str, default="") -> str:
     return fields.get(key.lower(), default)
 
 
-def matches_person(value: str, person: str) -> bool:
+ALLE = "alle"
+
+# Schreibweisen, mit denen jemand das ganze Team meint.
+ALLE_SYNONYME = {"alle", "all", "team", "everyone", "jeder"}
+
+
+def matches_person(value: str, person: str, alle: bool = False) -> bool:
     """
     Prüft, ob ein Feldwert eine bestimmte Person meint.
 
     Vergleicht auf Slug-Ebene und erlaubt mehrere Empfänger, durch
     Komma getrennt. "an: Max Mustermann, lars" trifft also sowohl auf
     "max-mustermann" als auch auf "lars" zu.
+
+    Ein einzelner Namensteil trifft ebenfalls. Der eigene Name im Channel
+    kommt aus git config user.name, also meist "max-mustermann", während
+    im Team jeder "/ask max" schreibt. Bis 0.4 kam eine solche Frage nie
+    an, ohne dass es irgendwo eine Meldung gab. Teile müssen ganz
+    passen, "maxine" ist nicht "max".
+
+    Mit alle=True zählt auch ein Eintrag an das ganze Team.
     """
     if not value or not person:
         return False
 
     target = slugify(person)
-    return any(slugify(part) == target for part in value.split(","))
+    teile = set(target.split("-"))
+    for part in value.split(","):
+        slug = slugify(part)
+        if slug == target or slug in teile:
+            return True
+        if alle and slug in ALLE_SYNONYME:
+            return True
+    return False

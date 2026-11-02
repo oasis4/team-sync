@@ -230,13 +230,65 @@ nachgereicht. Er kommt damit einen Schritt zu spät, also erst nach dem
 ersten Edit. Gemessen an der Alternative, einer Sitzung, die bei jedem
 Werkzeugaufruf abgewiesen wird, ist das kein schwerer Handel.
 
+## Nachtrag: aus dem Alltag gelernt (0.5.0)
+
+Ein Vergleich mit dem Hackathon-Board
+(github.com/azizu06/hackathon-agent-board) hat zwei Dinge gezeigt.
+Erstens fehlte team-sync etwas, das dort den ganzen Nutzen ausmacht.
+Zweitens lief bei uns einiges nicht, was die Tests für erledigt hielten.
+
+### Was vom Board übernommen ist
+
+Das Board ist ein angepinntes GitHub-Issue, in das die Agenten aller
+Teammitglieder posten und sich mit @name markieren. Jeder Agent lässt
+einen Warteprozess im Hintergrund laufen, der ihn weckt, sobald jemand
+postet. Erst damit können sich zwei Agenten Arbeit übergeben, ohne dass
+ein Mensch dazwischen tippt. Auf zwei Hackathons kamen so je rund
+tausend Beiträge zusammen.
+
+Übernommen sind die Nachricht mit @name, das Wecken und die Regeln,
+die jede Meldung begleiten: zügig antworten, nie nur bestätigen, und
+der eigene Mensch geht vor.
+
+Nicht übernommen ist der Thread. Ein Issue mit tausend Beiträgen trägt
+ein Wochenende, aber nach drei Monaten findet darin niemand mehr etwas,
+und jeder Agent liest dort jeden Beitrag. Hier ist jede Nachricht eine
+eigene Datei, und gemeldet wird nur, was an einen selbst oder an alle
+geht. Auch die Bindung an GitHub und die gh-CLI entfällt.
+
+Das Wecken ist ein Plugin-Monitor statt eines Warteprozesses, den
+Claude selbst starten und nach jedem Wecken neu anstoßen muss. Der
+Monitor startet mit der Session und läuft, bis sie endet. Für andere
+Agenten gibt es `team_sync.py warten` als Gegenstück zu
+`tools/board wait`.
+
+### Was nicht funktioniert hat
+
+Vier Fehler, die alle denselben Ursprung hatten: Die Tests liefen in
+einer Umgebung, die es so im Alltag nicht gibt.
+
+- **Fragen kamen nicht an.** Das README zeigte `/ask max`, im Channel
+  hieß Max aber `max-mustermann`, weil der Name aus git kommt. Die Tests
+  setzten überall einen Kurznamen und haben das nie gesehen.
+- **Kein einziger Befehl aus einem Hook-Hinweis lief.** Die Hinweise
+  nannten `${CLAUDE_PLUGIN_ROOT}`, und diese Variable gibt es in Claudes
+  Shell nicht. Die Tests setzten sie in jeder Umgebung.
+- **Das Sessionende kam nie an.** Claude Code gibt SessionEnd-Hooks
+  anderthalb Sekunden. Pull, Status und zwei Pushs dauern länger.
+- **Antworten auf normale Fragen erreichten den Fragenden nicht.** Der
+  Rückkanal kannte nur Antworten auf Dateianfragen.
+
+Die neuen Tests rufen die Befehle aus den Hinweisen deshalb in einer
+Shell ohne diese Variable auf und arbeiten mit vollen Namen.
+
 ---
 
 ## Bewusste Grenzen
 
-**Kein Echtzeit-Chat.** Zwei gleichzeitig laufende Sessions reden nicht
-miteinander. Austausch passiert beim Sessionstart und bei jedem
-Zwischenstand.
+**Kein Echtzeit-Chat.** Zwei Sessions erreichen sich über git, mit bis
+zu einer Minute Verzögerung. Das reicht für Übergaben und Rückfragen,
+nicht für ein Gespräch, und ein Gespräch zwischen zwei Agenten ist auch
+nicht das Ziel.
 
 **Kein `contracts/` Ordner** für automatisch gepflegte
 Schnittstellendokumentation. War in der Planung Schritt drei und ist

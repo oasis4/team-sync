@@ -27,5 +27,11 @@ Commit und Push erledigt das Skript.
    schreib ihn stattdessen mit dem Write-Tool in eine temporäre Datei und
    übergib `--text-file <pfad>`. Das ist zuverlässiger als jedes Quoting.
 4. Gib die Rückmeldung des Skripts knapp an den Nutzer weiter. Meldet es,
-   dass der Push nicht geklappt hat, sag das ausdrücklich — die Frage
+   dass der Push nicht geklappt hat, sag das ausdrücklich, denn die Frage
    liegt dann nur lokal und niemand sieht sie.
+5. Der Vorname der Zielperson genügt, das Skript sucht den vollen Namen
+   im Channel. Passt er auf mehrere, bricht es mit den Kandidaten ab:
+   Frag dann den Nutzer, wer gemeint ist. Meldet es, dass niemand mit
+   diesem Namen bekannt ist, sag das dem Nutzer deutlich. Vermutlich ist
+   es ein Tippfehler, oder die Person hat team-sync noch nicht
+   eingerichtet. Eine Frage an `alle` geht an das ganze Team.

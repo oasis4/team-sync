@@ -26,7 +26,8 @@ from lib.channel import (
     get_agent_name,
     get_channel_dir,
     get_project_dir,
-    pull_channel,
+    pull_gesperrt,
+    pull_merken,
     setup_stdio,
 )
 from lib.render import build_context
@@ -58,9 +59,13 @@ def main():
             # Sessionstart in jedem Projekt ohne Channel wäre nur lästig.
             return
 
-        pull_channel(channel_dir, timeout=PULL_TIMEOUT)
+        if pull_gesperrt(channel_dir, timeout=PULL_TIMEOUT, warten=3.0):
+            pull_merken(project_dir)
         me = get_agent_name(project_dir)
-        kontext = build_context(channel_dir, me)
+        # Was eine frühere Session schon gemeldet hat, kommt nicht noch
+        # einmal. Das betrifft Antworten und Nachrichten, die sonst bei
+        # jedem Start wieder oben stünden.
+        kontext = build_context(channel_dir, me, empfang.gesehen_laden(project_dir))
 
         # Der Rückkanal soll später nur Neues melden. Alles, was gerade
         # im Startkontext steht, gilt deshalb ab jetzt als gesehen —

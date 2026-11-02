@@ -47,7 +47,8 @@ from lib.channel import (
     get_current_branch,
     get_git_dir,
     get_project_dir,
-    pull_channel,
+    pull_gesperrt,
+    pull_merken,
     setup_stdio,
     should_checkpoint,
     touch_throttle,
@@ -156,8 +157,9 @@ def pre_invocation(daten) -> str:
     me = get_agent_name(project_dir)
 
     if erster:
-        pull_channel(channel_dir, timeout=PULL_TIMEOUT)
-        kontext = build_context(channel_dir, me)
+        if pull_gesperrt(channel_dir, timeout=PULL_TIMEOUT, warten=3.0):
+            pull_merken(project_dir)
+        kontext = build_context(channel_dir, me, empfang.gesehen_laden(project_dir))
         if kontext:
             teile.append(kontext)
         # Alles, was gerade im Startkontext steht, gilt ab jetzt als
@@ -166,11 +168,15 @@ def pre_invocation(daten) -> str:
         empfang.erstlauf_stumm_schalten(channel_dir, project_dir, me)
         return "\n\n".join(teile)
 
+    # Gezogen wird gedrosselt, gelesen bei jedem Aufruf. Lesen ist
+    # billig, und was ein schreibender Hook inzwischen geholt hat, soll
+    # nicht bis zum nächsten Pull liegen bleiben.
     if empfang.faellig(project_dir):
-        pull_channel(channel_dir, timeout=15)
-        neues = empfang.neuigkeiten(channel_dir, project_dir, me)
-        if neues:
-            teile.append(neues)
+        if pull_gesperrt(channel_dir, timeout=15, warten=3.0):
+            pull_merken(project_dir)
+    neues = empfang.neuigkeiten(channel_dir, project_dir, me)
+    if neues:
+        teile.append(neues)
 
     return "\n\n".join(teile)
 

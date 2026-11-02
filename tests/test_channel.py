@@ -41,9 +41,14 @@ class TestSetup(TeamTestCase):
         ergebnis = self.team.setup("Max")
         self.assertErfolg(ergebnis, "Zweites Setup fehlgeschlagen")
 
-        # Beide müssen denselben Startcommit sehen.
-        lars = git(["rev-parse", "team-channel"], cwd=self.team.projekte["Lars"])
-        max_ = git(["rev-parse", "team-channel"], cwd=self.team.projekte["Max"])
+        # Beide müssen denselben Startcommit sehen. Der Kopf des Branches
+        # unterscheidet sich, seit sich jede Person beim Setup mit Namen
+        # einträgt, die Wurzel aber nicht. Zwei verschiedene Wurzeln
+        # hießen zwei Channels, die nichts voneinander wissen.
+        lars = git(["rev-list", "--max-parents=0", "team-channel"],
+                   cwd=self.team.projekte["Lars"])
+        max_ = git(["rev-list", "--max-parents=0", "team-channel"],
+                   cwd=self.team.projekte["Max"])
         self.assertEqual(lars.stdout.strip(), max_.stdout.strip())
 
     def test_setup_ist_wiederholbar(self):

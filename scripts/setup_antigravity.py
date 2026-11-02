@@ -13,7 +13,7 @@ Geschrieben wird, standardmäßig in den Projektordner:
 
     .agents/hooks.json          Hooks, verweist auf dieses Repo
     .agents/rules/              Dauerregel zum Team-Channel
-    .agents/workflows/          /team, /ask, /answer, /decide, /sync
+    .agents/workflows/          /team, /ask, /answer, /decide, /sync, /post
 
 Mit --global landet dasselbe unter ~/.gemini/config/ und gilt dann für
 alle Projekte. Das ist die schlechtere Vorgabe: Die Hooks laufen dann

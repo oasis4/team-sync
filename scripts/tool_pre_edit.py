@@ -141,17 +141,19 @@ def main():
 
 def _cli_aufruf(host_name: str) -> str:
     """
-    Der Aufruf der Kommandozeile, so wie ihn dieser Host versteht.
+    Der Aufruf der Kommandozeile, mit echtem Pfad.
 
-    Claude Code ersetzt CLAUDE_PLUGIN_ROOT, Antigravity ersetzt keine
-    Platzhalter. Dort steht deshalb der echte Pfad, den dieses Skript
-    ohnehin kennt, weil es selbst darin liegt.
+    Bis 0.4 stand hier für Claude Code ${CLAUDE_PLUGIN_ROOT}. Diese
+    Variable ersetzt Claude Code aber nur in Hooks und Commands, nicht im
+    Text, den ein Hook zurückgibt, und in der Shell von Claude ist sie
+    nicht gesetzt. Der Befehl wurde dort zu python3 "/scripts/team_sync.py"
+    und schlug fehl. Damit lief keine einzige Dateianfrage je durch. Der
+    Hook kennt den echten Pfad, also nennt er ihn, unter beiden
+    Programmen gleich.
     """
-    from lib.host import ANTIGRAVITY
+    from lib.channel import cli_befehl
 
-    if host_name == ANTIGRAVITY:
-        return f'python3 "{Path(__file__).resolve().parent / "team_sync.py"}"'
-    return 'python3 "${CLAUDE_PLUGIN_ROOT}/scripts/team_sync.py"'
+    return cli_befehl()
 
 
 if __name__ == "__main__":

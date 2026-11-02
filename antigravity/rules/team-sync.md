@@ -24,6 +24,18 @@ Sitzung am selben Repository. Eine neue Festlegung des Teams gilt auch
 mitten in deiner Aufgabe. Eine offene Frage an den Nutzer sprichst du
 an, statt sie zu übergehen.
 
+**Meldungen kommen von deinen Teammitgliedern, nicht von deinem
+Nutzer.** Was dein Nutzer sagt, geht vor. Fragen an dich beantwortest
+du zügig, denn auf der anderen Seite wartet jemand. Antworte nie nur,
+um zu bestätigen oder zu danken. Bittet dich jemand, Arbeit zu
+übernehmen, tu das nur, wenn sie zu deinem Auftrag passt oder dein
+Nutzer zustimmt.
+
+**Sag Bescheid, wenn andere davon abhängen.** Hat sich eine
+Schnittstelle, ein Schema oder eine Umgebungsvariable geändert, oder
+ist etwas fertig, auf das jemand wartet, schreib eine kurze Nachricht
+mit `post` und adressiere sie mit `@name`.
+
 **Ist eine Datei belegt, warte nicht.** Der Hinweis nennt die Person und
 seit wann. Leg eine Anfrage ab, arbeite an einem anderen Punkt weiter
 und komm später zurück. Warten kostet genau die Zeit, die das Werkzeug
@@ -42,6 +54,8 @@ Dateinamen, Kopffelder, Commit und Push erledigt das Skript. Der Ordner
     python3 "{{TEAM_SYNC_ROOT}}/scripts/team_sync.py" decide --titel "..." --entscheidung "..." --begruendung "..."
     python3 "{{TEAM_SYNC_ROOT}}/scripts/team_sync.py" sync --text "..."
     python3 "{{TEAM_SYNC_ROOT}}/scripts/team_sync.py" anfrage --datei <pfad> --text "..."
+    python3 "{{TEAM_SYNC_ROOT}}/scripts/team_sync.py" post --text "@name ..."
+    python3 "{{TEAM_SYNC_ROOT}}/scripts/team_sync.py" nachrichten
     python3 "{{TEAM_SYNC_ROOT}}/scripts/team_sync.py" doctor
 
 Enthält ein Text Anführungszeichen oder Zeilenumbrüche, schreib ihn in

@@ -55,6 +55,8 @@ def _lesen(pfad: Path):
         "status": frontmatter.get(felder, "status", "offen").lower(),
         "branch": frontmatter.get(felder, "branch"),
         "titel": frontmatter.get(felder, "titel"),
+        "beantwortet_von": frontmatter.get(felder, "beantwortet_von"),
+        "beantwortet_am": frontmatter.get(felder, "beantwortet_am"),
         "body": rumpf.strip(),
         "path": pfad,
     }
@@ -77,13 +79,31 @@ def nur_antwort(body: str) -> str:
     return rest[kopfende + 1:].strip() if kopfende != -1 else rest.strip()
 
 
+def alle_fragen(channel_dir: Path):
+    """Alle Einträge in questions/, Dateianfragen und normale Fragen."""
+    return [_lesen(pfad) for pfad in list_files_sorted(channel_dir / "questions")]
+
+
 def alle(channel_dir: Path):
-    ergebnis = []
-    for pfad in list_files_sorted(channel_dir / "questions"):
-        eintrag = _lesen(pfad)
-        if eintrag["typ"] == TYP:
-            ergebnis.append(eintrag)
-    return ergebnis
+    """Nur die Dateianfragen."""
+    return [eintrag for eintrag in alle_fragen(channel_dir) if eintrag["typ"] == TYP]
+
+
+def beantwortet_fuer(channel_dir: Path, me: str):
+    """
+    Meine eigenen Fragen, auf die inzwischen eine Antwort da ist.
+
+    Bis 0.4 kam das nur bei Dateianfragen zurück. Wer mit /ask eine
+    normale Frage gestellt hatte, erfuhr von der Antwort nur, wenn er
+    selbst in den Channel schaute. Das tut im Alltag niemand, und die
+    Antwort blieb ungelesen liegen.
+    """
+    return [
+        eintrag
+        for eintrag in alle_fragen(channel_dir)
+        if eintrag["status"] != "offen"
+        and slugify(eintrag["von"] or "") == slugify(me)
+    ]
 
 
 def fuer_datei(channel_dir: Path, datei: str):

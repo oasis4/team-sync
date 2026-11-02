@@ -16,6 +16,9 @@ ein Skript nicht kann.
 Aufruf:
 
     python3 team_sync.py ask --to max --titel "..." --text "..."
+    python3 team_sync.py post --text "@max Login ist gemergt, die API-Route ist frei"
+    python3 team_sync.py nachrichten
+    python3 team_sync.py warten
     python3 team_sync.py fragen --offen
     python3 team_sync.py answer --id 2026-08-16-1830-lars-an-max --text "..."
     python3 team_sync.py decide --titel "..." --entscheidung "..." --begruendung "..."
@@ -34,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from lib import anfrage, frontmatter, render, reservierung
+from lib import anfrage, frontmatter, nachrichten, personen, render, reservierung
 from lib.channel import (
     CHANNEL_BRANCH,
     ChannelLock,
@@ -44,10 +47,12 @@ from lib.channel import (
     get_channel_dir,
     get_current_branch,
     get_project_dir,
+    lauscher_aktiv,
     list_worktrees,
     now_id,
     now_stamp,
     pull_channel,
+    pull_gesperrt,
     read_text,
     run_git,
     setup_hint,
@@ -138,25 +143,51 @@ def melde(erfolg: bool, pfad: str, was: str) -> int:
 # ---------------------------------------------------------------------------
 
 
+def ziel_aufloesen(ctx, name):
+    """
+    Löst einen Namen auf und meldet Mehrdeutigkeit als Fehler.
+
+    Rückgabe: Aufloesung, oder None nach einer Fehlermeldung.
+    """
+    aufloesung = personen.aufloesen(ctx.channel_dir, name)
+    if aufloesung.mehrdeutig:
+        fehler(
+            f"'{name}' passt auf mehrere Personen: "
+            f"{', '.join(aufloesung.kandidaten)}. Bitte den vollen Namen angeben."
+        )
+        return None
+    return aufloesung
+
+
 def cmd_ask(args) -> int:
     ctx = Kontext()
     if not ctx.bereit():
         return kein_setup(ctx)
 
-    ziel = args.to.strip()
     text = text_argument(args)
     if not text:
         fehler("Die Frage ist leer.")
         return EXIT_FEHLER
 
+    # Vor dem Auflösen ziehen, sonst fehlt eine Person, die seit dem
+    # letzten Pull dazugekommen ist, in der Liste der bekannten Namen.
+    pull_gesperrt(ctx.channel_dir)
+    aufloesung = ziel_aufloesen(ctx, args.to.strip())
+    if aufloesung is None:
+        return EXIT_FEHLER
+    if aufloesung.slug == slugify(ctx.me):
+        fehler("Das bist du selbst. Wen willst du fragen?")
+        return EXIT_FEHLER
+    ziel = aufloesung.slug
+
     titel = (args.titel or text.splitlines()[0])[:80].strip()
-    dateiname = f"{now_id()}-{ctx.me}-an-{slugify(ziel)}.md"
+    dateiname = f"{now_id()}-{ctx.me}-an-{ziel}.md"
 
     inhalt = frontmatter.build(
         {
             "typ": "frage",
             "von": ctx.me,
-            "an": slugify(ziel),
+            "an": ziel,
             "erstellt": now_stamp(),
             "branch": ctx.branch,
             "status": "offen",
@@ -169,9 +200,127 @@ def cmd_ask(args) -> int:
         ctx.channel_dir,
         f"questions/{dateiname}",
         inhalt,
-        f"frage: {ctx.me} an {slugify(ziel)} - {titel[:50]}",
+        f"frage: {ctx.me} an {ziel} - {titel[:50]}",
     )
-    return melde(erfolg, f"questions/{dateiname}", "Frage")
+    ergebnis = melde(erfolg, f"questions/{dateiname}", f"Frage an {ziel}")
+    if not aufloesung.bekannt:
+        print("\n" + personen.warnung_unbekannt(aufloesung, personen.bekannte(ctx.channel_dir)))
+    return ergebnis
+
+
+# ---------------------------------------------------------------------------
+# post, nachrichten, warten
+# ---------------------------------------------------------------------------
+
+
+def cmd_post(args) -> int:
+    """
+    Eine kurze Nachricht an Teammitglieder, adressiert mit @name.
+
+    Ohne Adressat geht sie an alle. Das ist bewusst die Ausnahme: Jede
+    Nachricht weckt die Sessions der Empfänger, und eine Nachricht an
+    alle weckt alle.
+    """
+    ctx = Kontext()
+    if not ctx.bereit():
+        return kein_setup(ctx)
+
+    text = text_argument(args)
+    if not text:
+        fehler("Die Nachricht ist leer.")
+        return EXIT_FEHLER
+
+    pull_gesperrt(ctx.channel_dir)
+
+    namen = list(args.an or []) + nachrichten.erwaehnungen(text)
+    empfaenger = []
+    unbekannt = []
+    for name in namen:
+        aufloesung = ziel_aufloesen(ctx, name)
+        if aufloesung is None:
+            return EXIT_FEHLER
+        if aufloesung.ist_alle:
+            empfaenger = [personen.ALLE]
+            unbekannt = []
+            break
+        if aufloesung.slug == slugify(ctx.me):
+            continue
+        if not aufloesung.bekannt:
+            unbekannt.append(aufloesung)
+        if aufloesung.slug not in empfaenger:
+            empfaenger.append(aufloesung.slug)
+
+    if not empfaenger:
+        empfaenger = [personen.ALLE]
+
+    relativ, gepusht = nachrichten.schreiben(
+        ctx.channel_dir, ctx.me, empfaenger, ctx.branch, text
+    )
+    if not relativ:
+        fehler("Die Nachricht konnte nicht geschrieben werden.")
+        return EXIT_FEHLER
+
+    ergebnis = melde(gepusht, relativ, f"Nachricht an {', '.join(empfaenger)}")
+    if unbekannt:
+        team = personen.bekannte(ctx.channel_dir)
+        for aufloesung in unbekannt:
+            print("\n" + personen.warnung_unbekannt(aufloesung, team))
+    return ergebnis
+
+
+def cmd_nachrichten(args) -> int:
+    ctx = Kontext()
+    if not ctx.bereit():
+        return kein_setup(ctx)
+    if not args.kein_pull:
+        pull_gesperrt(ctx.channel_dir)
+
+    liste = nachrichten.alle(ctx.channel_dir) if args.alle else nachrichten.an_mich(
+        ctx.channel_dir, ctx.me
+    )
+    liste = liste[-args.n:] if args.n > 0 else liste
+
+    if not liste:
+        print("Keine Nachrichten." if args.alle else "Keine Nachrichten an dich.")
+        return EXIT_OK
+
+    for eintrag in liste:
+        an = "alle" if nachrichten.ist_an_alle(eintrag) else (eintrag["an"] or "?")
+        print(f"--- {eintrag['von']} an {an}, {eintrag['erstellt']} "
+              f"({describe_age(eintrag['erstellt'])})")
+        print(eintrag["text"])
+        print()
+    return EXIT_OK
+
+
+def cmd_warten(args) -> int:
+    """
+    Wartet, bis im Channel etwas für dich ankommt, gibt es aus und endet.
+
+    Das Gegenstück zu 'tools/board wait' vom Hackathon-Board. Unter
+    Claude Code erledigt das der Monitor von selbst. Gedacht ist dieser
+    Befehl für andere Agenten und für Schleifen wie
+
+        while python3 team_sync.py warten; do <agent-aufruf>; done
+
+    Exit 0 nach einer Meldung, 124 nach Ablauf von --timeout.
+    """
+    from lib import lauschen
+
+    ctx = Kontext()
+    if not ctx.bereit():
+        return kein_setup(ctx)
+
+    ergebnis = lauschen.schleife(
+        ctx.project_dir,
+        ctx.channel_dir,
+        intervall=max(1, args.intervall),
+        einmal=True,
+        timeout=max(0, args.timeout),
+    )
+    if ergebnis == 124:
+        print(f"Keine Meldung innerhalb von {args.timeout} Sekunden.", file=sys.stderr)
+    return ergebnis
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +333,7 @@ def cmd_fragen(args) -> int:
     if not ctx.bereit():
         return kein_setup(ctx)
 
-    pull_channel(ctx.channel_dir)
+    pull_gesperrt(ctx.channel_dir)
 
     person = args.person or ctx.me
     if args.gestellt:
@@ -478,7 +627,7 @@ def cmd_reservierungen(args) -> int:
         return kein_setup(ctx)
 
     if not args.kein_pull:
-        pull_channel(ctx.channel_dir)
+        pull_gesperrt(ctx.channel_dir)
 
     fremde = reservierung.alle_fremden(ctx.channel_dir, ctx.me)
     _, eigene = reservierung.eigene_lesen(ctx.channel_dir, ctx.me)
@@ -522,7 +671,7 @@ def cmd_uebersicht(args) -> int:
     ctx = Kontext()
     if not ctx.bereit():
         return kein_setup(ctx)
-    pull_channel(ctx.channel_dir)
+    pull_gesperrt(ctx.channel_dir)
     print(render.build_overview(ctx.channel_dir, ctx.me))
     return EXIT_OK
 
@@ -532,7 +681,7 @@ def cmd_kontext(args) -> int:
     if not ctx.bereit():
         return kein_setup(ctx)
     if not args.kein_pull:
-        pull_channel(ctx.channel_dir)
+        pull_gesperrt(ctx.channel_dir)
     text = render.build_context(ctx.channel_dir, ctx.me)
     print(text or "(Channel ist leer, kein Kontext)")
     return EXIT_OK
@@ -663,11 +812,24 @@ def cmd_doctor(args) -> int:
                 f"Einmalig: git -C \"{ctx.channel_dir}\" push -u origin {CHANNEL_BRANCH}"
             )
 
-        for unterordner in ("status", "questions", "decisions"):
+        for unterordner in ("status", "questions", "decisions", "nachrichten"):
             pfad = ctx.channel_dir / unterordner
             anzahl = len(list(pfad.glob("*.md"))) if pfad.is_dir() else 0
             zustand = "fehlt" if not pfad.is_dir() else f"{anzahl} Einträge"
             print(f"  {unterordner:<16} {zustand}")
+
+        team = personen.bekannte(ctx.channel_dir)
+        print(f"Bekannt im Team:   {', '.join(team) if team else 'noch niemand'}")
+        if ctx.me not in team:
+            print("                   (du selbst noch nicht, das ändert die erste Session)")
+
+        from lib.lauschen import INTERVALL
+
+        print(
+            "Lauscher:          "
+            + ("läuft" if lauscher_aktiv(ctx.project_dir, INTERVALL)
+               else "läuft gerade nicht (startet mit jeder Claude-Code-Session)")
+        )
 
         eigener_status = ctx.channel_dir / "status" / f"{ctx.me}.md"
         if eigener_status.is_file():
@@ -719,6 +881,29 @@ def build_parser():
     p_ask.add_argument("--titel", help="Kurztitel der Frage")
     _text_argumente(p_ask, "Die Frage")
     p_ask.set_defaults(func=cmd_ask)
+
+    p_post = sub.add_parser(
+        "post", help="Nachricht an Teammitglieder, adressiert mit @name im Text"
+    )
+    p_post.add_argument(
+        "--an", action="append",
+        help="Empfänger, mehrfach angebbar. Zusätzlich zu den @namen im Text",
+    )
+    _text_argumente(p_post, "Die Nachricht")
+    p_post.set_defaults(func=cmd_post)
+
+    p_nachr = sub.add_parser("nachrichten", help="Letzte Nachrichten an dich zeigen")
+    p_nachr.add_argument("-n", type=int, default=10, help="Wie viele (Vorgabe 10)")
+    p_nachr.add_argument("--alle", action="store_true", help="Auch die an andere")
+    p_nachr.add_argument("--kein-pull", dest="kein_pull", action="store_true")
+    p_nachr.set_defaults(func=cmd_nachrichten)
+
+    p_warten = sub.add_parser(
+        "warten", help="Warten, bis etwas für dich ankommt, dann ausgeben und enden"
+    )
+    p_warten.add_argument("--intervall", type=int, default=30, help="Sekunden zwischen zwei Blicken")
+    p_warten.add_argument("--timeout", type=int, default=0, help="Höchstens so lange warten (0 = ewig)")
+    p_warten.set_defaults(func=cmd_warten)
 
     p_fragen = sub.add_parser("fragen", help="Offene Fragen auflisten")
     p_fragen.add_argument("--person", help="Für wen (Vorgabe: man selbst)")

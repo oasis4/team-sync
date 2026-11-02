@@ -15,7 +15,8 @@ from pathlib import Path
 
 WURZEL = Path(__file__).resolve().parent.parent
 HOOK_EREIGNISSE = {
-    "SessionStart", "Stop", "SessionEnd", "PreToolUse", "PostToolUse",
+    "SessionStart", "UserPromptSubmit", "Stop", "SessionEnd", "PreToolUse",
+    "PostToolUse",
 }
 
 # Hooks, die vor bzw. nach jedem einzelnen Werkzeugaufruf laufen und
@@ -95,6 +96,31 @@ class TestHooks(unittest.TestCase):
                 self.assertIn("matcher", gruppe, f"{ereignis} ohne matcher")
                 self.assertIn("Edit", gruppe["matcher"])
 
+    def test_schreibende_hooks_laufen_im_hintergrund(self):
+        """
+        Ein Push dauert Sekunden. Laufen Reservierung und Zwischenstand
+        synchron, wartet Claude nach jedem ersten Edit einer Datei und
+        alle zehn Minuten nach einer Antwort darauf.
+        """
+        for gruppe in self.hooks["PostToolUse"]:
+            for hook in gruppe["hooks"]:
+                self.assertTrue(hook.get("async"), hook["command"])
+
+        stop = [hook for gruppe in self.hooks["Stop"] for hook in gruppe["hooks"]]
+        empfang = [h for h in stop if h["command"].endswith(" empfang")]
+        schreiben = [h for h in stop if h["command"].endswith(" schreiben")]
+        self.assertEqual(len(empfang), 1)
+        self.assertEqual(len(schreiben), 1)
+        # Nur ein synchroner Hook kann Text an Claude zurückgeben.
+        self.assertFalse(empfang[0].get("async", False))
+        self.assertTrue(schreiben[0].get("async"))
+
+    def test_hooks_vor_eingabe_und_edit_sind_synchron(self):
+        for ereignis in ("UserPromptSubmit", "PreToolUse", "SessionStart"):
+            for gruppe in self.hooks[ereignis]:
+                for hook in gruppe["hooks"]:
+                    self.assertFalse(hook.get("async", False), ereignis)
+
     def test_timeouts_gesetzt(self):
         for ereignis, gruppen in self.hooks.items():
             for gruppe in gruppen:
@@ -103,13 +129,45 @@ class TestHooks(unittest.TestCase):
                     self.assertLessEqual(hook["timeout"], 60)
 
 
+class TestMonitor(unittest.TestCase):
+    """
+    Der Lauscher als Plugin-Monitor.
+
+    Fehlt die Datei oder zeigt sie ins Leere, fällt das nicht auf. Die
+    Session bekommt dann einfach keine Meldungen mehr, solange sie auf
+    Eingabe wartet, und genau das sollte der Monitor beheben.
+    """
+
+    def setUp(self):
+        self.monitore = lies_json(WURZEL / "monitors" / "monitors.json")
+
+    def test_ist_eine_liste_mit_pflichtfeldern(self):
+        self.assertIsInstance(self.monitore, list)
+        self.assertTrue(self.monitore)
+        for eintrag in self.monitore:
+            self.assertEqual(set(eintrag) - {"when"}, {"name", "command", "description"})
+
+    def test_skript_existiert_und_pluginwurzel_wird_verwendet(self):
+        for eintrag in self.monitore:
+            befehl = eintrag["command"]
+            self.assertIn("${CLAUDE_PLUGIN_ROOT}", befehl)
+            treffer = re.search(r"scripts/([\w_]+\.py)", befehl)
+            self.assertIsNotNone(treffer, befehl)
+            self.assertTrue((WURZEL / "scripts" / treffer.group(1)).is_file())
+
+    def test_keine_nutzerkonfiguration_im_befehl(self):
+        """Ein Monitor mit ${user_config.*} startet laut Doku gar nicht."""
+        for eintrag in self.monitore:
+            self.assertNotIn("user_config", eintrag["command"])
+
+
 class TestCommands(unittest.TestCase):
     def setUp(self):
         self.dateien = sorted((WURZEL / "commands").glob("*.md"))
 
     def test_commands_vorhanden(self):
         namen = {pfad.stem for pfad in self.dateien}
-        self.assertEqual(namen, {"ask", "answer", "decide", "sync", "team"})
+        self.assertEqual(namen, {"ask", "answer", "decide", "sync", "team", "post"})
 
     def test_frontmatter_vollstaendig(self):
         for pfad in self.dateien:

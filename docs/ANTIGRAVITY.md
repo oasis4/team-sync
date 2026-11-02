@@ -37,7 +37,7 @@ Geschrieben wird in den Projektordner:
 .agents/
 ├── hooks.json          Gruppe "team-sync", verweist auf den Klon oben
 ├── rules/team-sync.md  Dauerregel, erklärt dem Agenten den Channel
-└── workflows/          team, ask, answer, decide, sync
+└── workflows/          team, ask, answer, decide, sync, post
 ```
 
 In diesen Dateien stehen absolute Pfade zu deinem Klon. Sie gehören
@@ -100,6 +100,13 @@ in beiden Fällen dieselbe, nur der Aufhänger unterscheidet sich.
 | `SessionEnd` | `Stop` | Letzter Stand, Reservierungen frei |
 | `PreToolUse` | `PreToolUse` | Hinweis auf eine belegte Datei |
 | `PostToolUse` | `PostToolUse` | Datei beim ersten Zugriff reservieren |
+
+Einen Lauscher gibt es unter Antigravity nicht, denn dort fehlt ein
+Gegenstück zu den Plugin-Monitoren von Claude Code. Nachrichten und
+Antworten kommen deshalb vor dem nächsten Modellaufruf, nicht während
+die Sitzung auf Eingabe wartet. Wer das braucht, lässt in einem eigenen
+Terminal `team_sync.py warten` laufen. Es kehrt zurück, sobald etwas
+ankommt.
 
 Ein eigenes Startereignis gibt es unter Antigravity nicht. Ob ein
 `PreInvocation` der erste einer Unterhaltung ist, merkt sich das Plugin

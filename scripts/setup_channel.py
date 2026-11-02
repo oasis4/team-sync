@@ -32,8 +32,12 @@ from lib.channel import (
     CHANNEL_BRANCH,
     SUBDIRS,
     cache_verwerfen,
+    get_agent_name,
+    get_current_branch,
+    now_stamp,
     run_git,
     setup_stdio,
+    write_and_push,
     write_text_lf,
 )
 
@@ -50,6 +54,8 @@ aus Antigravity.
 - `status/` eine Datei pro Person, automatisch aktualisiert
 - `questions/` eine Datei pro Frage, angelegt mit `/ask`, beantwortet mit `/answer`
 - `decisions/` eine Datei pro Entscheidung, angelegt mit `/decide`
+- `reservierungen/` wer gerade an welcher Datei sitzt, automatisch
+- `nachrichten/` eine Datei pro Nachricht, angelegt mit `/post`, adressiert mit `@name`
 
 Der Branch ist verwaist, er hat keinen gemeinsamen Vorfahren mit `main`.
 Bitte nicht mergen. Von Hand editieren ist erlaubt, es sind ganz normale
@@ -153,6 +159,35 @@ def fuelle_struktur(channel_dir: Path):
     )
 
 
+def anwesenheit_eintragen(project_dir: Path, channel_dir: Path):
+    """
+    Trägt die eigene Person mit einem leeren Status in den Channel ein.
+
+    Damit kennt der Channel den Namen, bevor die erste Session etwas
+    geschrieben hat. Ohne das findet "/ask max" niemanden, solange Max
+    das Plugin zwar eingerichtet, aber noch nie benutzt hat, und die
+    Frage landet unter einem Namen, den keiner liest. Ein vorhandener
+    Status wird nicht angefasst.
+    """
+    from lib.render import QUELLE_EINGERICHTET, render_status
+
+    me = get_agent_name(project_dir)
+    if me == "unbekannt" or (channel_dir / "status" / f"{me}.md").exists():
+        return
+
+    inhalt = render_status(
+        person=me,
+        branch=get_current_branch(project_dir),
+        stamp=now_stamp(),
+        quelle=QUELLE_EINGERICHTET,
+        freitext="Hat den Channel eingerichtet, noch keine Session.",
+    )
+    if write_and_push(channel_dir, f"status/{me}.md", inhalt, f"status: {me} eingerichtet"):
+        print(f"Im Team bekannt als: {me}")
+    else:
+        print(f"Im Team bekannt als: {me} (noch nicht gepusht)")
+
+
 def main() -> int:
     setup_stdio()
 
@@ -186,6 +221,7 @@ def main() -> int:
         ok, _ = run_git(["rev-parse", "--is-inside-work-tree"], cwd=channel_dir)
         if ok:
             print("Der Channel ist bereits eingerichtet. Nichts zu tun.")
+            anwesenheit_eintragen(project_dir, channel_dir)
             print("Prüfen mit: python3 scripts/team_sync.py doctor")
             return 0
         abbruch(
@@ -241,6 +277,8 @@ def main() -> int:
     # Ein Cache aus der Zeit vor dem Setup zeigt auf einen Ort, an dem
     # nichts lag. Die Hooks würden ihn bis zu einer Minute weiterglauben.
     cache_verwerfen(project_dir)
+
+    anwesenheit_eintragen(project_dir, channel_dir)
 
     print()
     print("Fertig.")

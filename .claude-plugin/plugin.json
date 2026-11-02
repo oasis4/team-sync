@@ -1,8 +1,8 @@
 {
   "name": "team-sync",
   "displayName": "Team Sync",
-  "version": "0.4.0",
-  "description": "Teilt Status, offene Fragen und Architekturentscheidungen zwischen parallelen Agentensitzungen am selben Repository. Über einen eigenen Git-Branch, ohne zentralen Server. Läuft unter Claude Code und Antigravity.",
+  "version": "0.5.0",
+  "description": "Teilt Status, Fragen, Nachrichten und Entscheidungen zwischen parallelen Agentensitzungen am selben Repository und weckt eine Session, sobald etwas für sie ankommt. Über einen eigenen Git-Branch, ohne zentralen Server. Läuft unter Claude Code und Antigravity.",
   "author": {
     "name": "Finn Andresen"
   },

@@ -49,6 +49,9 @@ class TeamUmgebung:
         self.remote = basis / "remote.git"
         self.projekte = {}
         self.channels = {}
+        # Voller Name je Person, so wie er im echten Leben aus
+        # git config user.name kommt. Ohne Eintrag ist es der Kurzname.
+        self.anzeigenamen = {}
 
         git(["init", "--bare", "-b", "main", str(self.remote)], cwd=basis)
 
@@ -77,7 +80,7 @@ class TeamUmgebung:
     def umgebung(self, name: str, extra=None):
         env = dict(os.environ)
         env["CLAUDE_PROJECT_DIR"] = str(self.projekte[name])
-        env["TEAM_AGENT_NAME"] = name
+        env["TEAM_AGENT_NAME"] = self.anzeigenamen.get(name, name)
         env["CLAUDE_PLUGIN_ROOT"] = str(PLUGIN_ROOT)
         # Sonst schlagen Commits in den Testrepos an fehlender Identität fehl.
         env["GIT_AUTHOR_NAME"] = name
@@ -120,10 +123,20 @@ class TeamUmgebung:
             env=self.umgebung(name, extra),
         )
 
-    def hook(self, name: str, skript: str, payload=None, extra=None):
-        """Ruft ein Hook-Skript mit einer Payload auf, wie Claude Code es tut."""
+    def hook(self, name: str, skript: str, payload=None, extra=None, argv=()):
+        """
+        Ruft ein Hook-Skript mit einer Payload auf, wie Claude Code es tut.
+
+        Der SessionEnd-Hook löst seine Arbeit normalerweise in einen
+        eigenen Prozess ab und kehrt sofort zurück. In Tests läuft er
+        deshalb im Vordergrund, sonst prüft der Test, bevor geschrieben
+        ist, und das Aufräumen des Testordners kollidiert mit dem noch
+        laufenden Prozess.
+        """
+        if skript == "session_end.py" and not argv:
+            argv = ("--vordergrund",)
         return subprocess.run(
-            [sys.executable, str(SCRIPTS / skript)],
+            [sys.executable, str(SCRIPTS / skript)] + [str(a) for a in argv],
             cwd=str(self.projekte[name]),
             capture_output=True,
             text=True,

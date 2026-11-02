@@ -3,6 +3,92 @@
 Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/),
 Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.5.0] — 2026-11-02
+
+Bis hierher hat team-sync im Alltag weniger getan, als die Tests
+behaupteten. Vier Fehler hatten denselben Ursprung: Die Testumgebung
+setzte einen Kurznamen und `CLAUDE_PLUGIN_ROOT`, und beides ist im
+echten Betrieb nicht so. Diese Version behebt sie und übernimmt dazu,
+was das [Hackathon-Board](https://github.com/azizu06/hackathon-agent-board)
+besser macht: Agenten, die einander Nachrichten schreiben und sich
+gegenseitig wecken.
+
+### Behoben
+
+- **Fragen kamen nicht an.** `/ask max` legte die Frage unter `max` ab,
+  Max steht im Channel aber unter seinem git-Namen `max-mustermann`. Die
+  Frage blieb ungelesen liegen, ohne jede Meldung. Namen werden jetzt
+  gegen die bekannten Personen aufgelöst, Vor- oder Nachname genügen.
+  Ein mehrdeutiger Name bricht mit den Kandidaten ab, ein unbekannter
+  wird laut gemeldet.
+- **Befehle aus Hook-Hinweisen liefen ins Leere.** Der Hinweis auf eine
+  belegte Datei und der Rückkanal nannten `${CLAUDE_PLUGIN_ROOT}` oder
+  gar keinen Pfad. In Claudes Shell ist die Variable nicht gesetzt, der
+  Befehl wurde zu `python3 "/scripts/team_sync.py"`. Damit kam keine
+  einzige Dateianfrage je zustande. Die Hinweise nennen jetzt den echten
+  Pfad.
+- **Das Sessionende kam nie an.** Claude Code gibt SessionEnd-Hooks
+  anderthalb Sekunden, und ein Timeout aus einem Plugin hebt das nicht
+  an. Status und Freigabe brauchten länger, die Reservierungen blieben
+  vier Stunden stehen. Der Hook löst die Arbeit jetzt in einen eigenen
+  Prozess ab und kehrt sofort zurück.
+- **Antworten auf normale Fragen erreichten den Fragenden nicht.** Der
+  Rückkanal kannte nur Antworten auf Dateianfragen. Jetzt kommen alle
+  Antworten, während der Session und beim nächsten Start.
+- Der SessionEnd-Hook las das Feld `session_end_reason`, das es nicht
+  gibt. Es heißt `reason`. Ein `/clear` galt deshalb als Sessionende.
+- Gleichzeitige Pulls mehrerer Prozesse konnten sich gegenseitig den
+  Rebase abbrechen. Alle Pulls außerhalb eines Schreibvorgangs laufen
+  jetzt unter der Channel-Sperre.
+
+### Neu
+
+- **Nachrichten mit @name.** `/post @max Login ist gemergt, die Route
+  ist frei` legt eine Nachricht in `nachrichten/` ab. Gemeldet wird sie
+  nur an die Genannten, ohne `@name` an alle. Für Übergaben, für
+  Änderungen, von denen andere abhängen, und für Blocker.
+- **Der Lauscher.** Ein Plugin-Monitor schaut alle 45 Sekunden mit
+  `git ls-remote` nach, ob sich der Channel bewegt hat, zieht nur dann,
+  und meldet, was für die Session neu ist. Die Meldung erreicht Claude
+  auch, wenn die Session auf Eingabe wartet. Abschaltbar mit
+  `TEAM_SYNC_LAUSCHEN=aus`.
+- **`team_sync.py warten`** kehrt bei der ersten Meldung zurück, wie
+  `tools/board wait` beim Hackathon-Board. Für andere Agenten und für
+  Schleifen.
+- **Hook vor jeder Eingabe** (UserPromptSubmit). Liest nur den lokalen
+  Stand, ohne Netz.
+- **Verhaltensregeln in jeder Meldung**, übernommen vom Board: zügig
+  antworten, nie nur bestätigen, der eigene Mensch geht vor.
+- `team_sync.py nachrichten` listet die letzten Nachrichten,
+  `/team` zeigt sie ebenfalls.
+- Fragen an `alle` gehen an das ganze Team.
+- Das Setup trägt die eigene Person mit Namen in den Channel ein, damit
+  andere sie finden, bevor sie die erste Session geöffnet hat.
+- `doctor` nennt die bekannten Personen und ob ein Lauscher läuft.
+
+### Geändert
+
+- Reservieren (PostToolUse) und Zwischenstand (Stop) laufen im
+  Hintergrund. Claude wartet nicht mehr auf einen Push.
+- Der Stop-Hook ist in zwei Einträge geteilt, `empfang` synchron und
+  `schreiben` im Hintergrund. Er zieht nur noch selbst, wenn kein
+  Lauscher läuft.
+- `TEAM_SYNC_EMPFANG_SECONDS` steuert nur noch, wie oft der Stop-Hook
+  zieht. Gelesen wird bei jedem Aufruf, weil Lesen billig ist.
+- Antigravity bekommt den Workflow `post` und dieselben Regeln. Einen
+  Lauscher gibt es dort nicht.
+
+### Bekannte Grenzen
+
+- Jede Meldung des Lauschers ist ein Modellaufruf auf dem Kontingent
+  der Person, die sie bekommt. Gemeldet wird deshalb nur, was an sie
+  oder an alle geht, und jede Sache nur einmal.
+- Monitore laufen nicht mit `claude -p` und nicht in älteren
+  Claude-Code-Versionen. Dann bleibt es bei den Hooks.
+- Arbeitet eine Person mit zwei Sessions im selben Projektordner, sieht
+  nur eine von beiden jede Meldung. Die Merkliste gilt pro Projekt,
+  nicht pro Session.
+
 ## [0.4.0] — 2026-09-14
 
 Bis hierher setzte team-sync voraus, dass alle im Team dasselbe Programm

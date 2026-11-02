@@ -11,6 +11,17 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/prompt_submit.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit|NotebookEdit",
@@ -30,7 +41,8 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/tool_post_edit.py\"",
-            "timeout": 25
+            "timeout": 25,
+            "async": true
           }
         ]
       }
@@ -40,8 +52,14 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_checkpoint.py\"",
-            "timeout": 25
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_checkpoint.py\" empfang",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_checkpoint.py\" schreiben",
+            "timeout": 60,
+            "async": true
           }
         ]
       }
@@ -52,7 +70,7 @@
           {
             "type": "command",
             "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/session_end.py\"",
-            "timeout": 30
+            "timeout": 5
           }
         ]
       }

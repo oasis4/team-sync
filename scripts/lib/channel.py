@@ -5,9 +5,11 @@ Grundidee: Neben dem eigentlichen Projekt-Repo liegt ein zweiter,
 lokaler Checkout desselben Repos auf dem Branch "team-channel".
 Das ist ein git worktree, siehe scripts/setup_channel.py. Darin:
 
-  status/     eine Datei pro Person, aktueller Stand
-  questions/  eine Datei pro Frage, wird um eine Antwort ergänzt
-  decisions/  eine Datei pro Architekturentscheidung
+  status/          eine Datei pro Person, aktueller Stand
+  questions/       eine Datei pro Frage, wird um eine Antwort ergänzt
+  decisions/       eine Datei pro Architekturentscheidung
+  reservierungen/  eine Datei pro Person, wer an welcher Datei sitzt
+  nachrichten/     eine Datei pro Nachricht, adressiert mit @name
 
 Zwei Regeln, die für alles hier gelten:
 
@@ -21,6 +23,7 @@ Zwei Regeln, die für alles hier gelten:
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -32,7 +35,7 @@ from pathlib import Path
 CHANNEL_BRANCH = os.environ.get("TEAM_SYNC_BRANCH", "team-channel")
 
 # Unterordner im Channel.
-SUBDIRS = ("status", "questions", "decisions", "reservierungen")
+SUBDIRS = ("status", "questions", "decisions", "reservierungen", "nachrichten")
 
 # Wie lange der schnelle Kontext-Cache gilt (Sekunden).
 CACHE_SECONDS = int(os.environ.get("TEAM_SYNC_CACHE_SECONDS", "60"))
@@ -250,15 +253,20 @@ class ChannelLock:
     wird nach stale_seconds ignoriert.
     """
 
-    def __init__(self, channel_dir: Path, timeout=8.0, stale_seconds=120.0):
+    def __init__(self, channel_dir: Path, timeout=8.0, stale_seconds=120.0,
+                 datei="team-sync.lock"):
         # Die Sperrdatei gehört ins Git-Verzeichnis, nicht in den
         # Arbeitsbaum. Läge sie im Channel, würde das folgende
         # 'git add -A' sie mitcommitten, und zwei Personen mit jeweils
         # eigener Sperrdatei bekämen bei jedem Rebase einen Konflikt in
         # genau der Datei, die Konflikte verhindern soll.
+        #
+        # Mit einem anderen Dateinamen und dem Projektordner statt des
+        # Channels dient dieselbe Klasse auch als Sperre für Merkdateien
+        # im Projekt, etwa für den Rückkanal.
         git_dir = get_git_dir(channel_dir)
         basis = git_dir if git_dir is not None else channel_dir
-        self.lock_path = basis / "team-sync.lock"
+        self.lock_path = basis / datei
         self.timeout = timeout
         self.stale_seconds = stale_seconds
         self.acquired = False
@@ -388,6 +396,26 @@ def pull_channel(channel_dir: Path, timeout=30) -> bool:
     if not ok:
         run_git(["rebase", "--abort"], cwd=channel_dir)
     return ok
+
+
+def pull_gesperrt(channel_dir: Path, timeout=30, warten=8.0) -> bool:
+    """
+    Pull unter der Channel-Sperre.
+
+    Seit es den Lauscher gibt, ziehen mehrere Prozesse eines Rechners
+    unabhängig voneinander: der Lauscher im Hintergrund, der Stop-Hook,
+    ein schreibender Hook. Ohne Sperre kollidieren sie an git's
+    index.lock, und das 'rebase --abort' aus pull_channel bricht im
+    schlimmsten Fall den Rebase eines anderen Prozesses ab.
+
+    Wer die Sperre nicht bekommt, zieht nicht. Das ist richtig so,
+    denn dann zieht oder schreibt gerade ein anderer Prozess, und der
+    holt den Stand ohnehin.
+    """
+    with ChannelLock(channel_dir, timeout=warten) as sperre:
+        if not sperre.acquired:
+            return False
+        return pull_channel(channel_dir, timeout=timeout)
 
 
 def has_unpushed_commits(channel_dir: Path) -> bool:
@@ -584,6 +612,114 @@ def touch_throttle(project_dir: Path):
         marker.touch()
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------------------
+# Zeitpunkt des letzten Pulls und Lebenszeichen des Lauschers
+# ---------------------------------------------------------------------------
+
+
+def _merker(project_dir: Path, name: str):
+    git_dir = get_git_dir(project_dir)
+    return (git_dir / name) if git_dir else None
+
+
+def _alter(pfad) -> float:
+    """Sekunden seit der letzten Änderung, unendlich ohne Datei."""
+    if pfad is None:
+        return float("inf")
+    try:
+        return time.time() - pfad.stat().st_mtime
+    except Exception:
+        return float("inf")
+
+
+def _beruehren(pfad):
+    if pfad is None:
+        return
+    try:
+        pfad.parent.mkdir(parents=True, exist_ok=True)
+        pfad.touch()
+    except Exception:
+        pass
+
+
+def pull_merken(project_dir: Path):
+    """
+    Hält fest, wann der Channel zuletzt gezogen wurde.
+
+    Eine eigene Datei, nicht die Merkdatei des Rückkanals. Die wird bei
+    jedem Lesen neu geschrieben, und seit der Rückkanal auch vor jeder
+    Nutzereingabe liest, wäre ihr Alter nie groß genug für einen Pull
+    gewesen.
+    """
+    _beruehren(_merker(project_dir, "team-sync-pull"))
+
+
+def pull_faellig(project_dir: Path, sekunden: int) -> bool:
+    return _alter(_merker(project_dir, "team-sync-pull")) >= sekunden
+
+
+def lauscher_melden(project_dir: Path):
+    """Lebenszeichen des Lauschers, bei jedem Durchlauf erneuert."""
+    _beruehren(_merker(project_dir, "team-sync-lauscher"))
+
+
+def lauscher_aktiv(project_dir: Path, intervall: int) -> bool:
+    """
+    Läuft auf diesem Rechner gerade ein Lauscher für dieses Projekt?
+
+    Dann zieht der Stop-Hook nicht selbst. Der Lauscher hält den Stand
+    ohnehin aktuell, und ein zweiter Pull nach jeder Antwort würde nur
+    die Session bremsen. Als lebendig gilt er, solange sein letztes
+    Lebenszeichen nicht älter als drei Durchläufe ist.
+    """
+    return _alter(_merker(project_dir, "team-sync-lauscher")) < max(3 * intervall, 30)
+
+
+# ---------------------------------------------------------------------------
+# Aufruf der Kommandozeile, so wie ihn eine Shell versteht
+# ---------------------------------------------------------------------------
+
+
+def _python_befehl() -> str:
+    """
+    Der Python-Aufruf, mit dem dieses Skript gerade läuft.
+
+    Bevorzugt der kurze Name, wenn er in der Shell auf denselben
+    Interpreter zeigt. Sonst der volle Pfad in Anführungszeichen, mit
+    Schrägstrichen, damit ihn auch Git Bash unter Windows versteht.
+    """
+    try:
+        eigener = Path(sys.executable).resolve()
+    except Exception:
+        return "python3"
+    for name in ("python3", "python"):
+        gefunden = shutil.which(name)
+        if not gefunden:
+            continue
+        try:
+            if Path(gefunden).resolve() == eigener:
+                return name
+        except Exception:
+            continue
+    return f'"{eigener.as_posix()}"'
+
+
+def cli_befehl() -> str:
+    """
+    Der vollständige Aufruf von team_sync.py für Texte an das Modell.
+
+    Hier lag der Grund, warum der Ablauf mit Reservierung und Anfrage im
+    Alltag nie funktioniert hat. Die Hooks haben Claude einen Befehl mit
+    ${CLAUDE_PLUGIN_ROOT} genannt. Claude Code ersetzt diese Variable
+    aber nur in Hooks und Commands, nicht in dem Text, den ein Hook
+    zurückgibt, und in der Shell von Claude ist sie nicht gesetzt. Aus
+    dem Befehl wurde dort python3 "/scripts/team_sync.py", und der lief
+    ins Leere. Der Hook kennt den echten Pfad, also nennt er ihn.
+    """
+    skript = (Path(__file__).resolve().parent.parent / "team_sync.py").as_posix()
+    return f'{_python_befehl()} "{skript}"'
 
 
 # ---------------------------------------------------------------------------

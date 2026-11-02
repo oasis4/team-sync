@@ -1,0 +1,7 @@
+[
+  {
+    "name": "team-channel",
+    "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/lauschen.py\" \"${CLAUDE_PROJECT_DIR}\"",
+    "description": "Neues aus dem Team-Channel: Fragen, Antworten und Nachrichten an dich"
+  }
+]

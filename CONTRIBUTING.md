@@ -6,9 +6,10 @@
 .claude-plugin/     plugin.json und marketplace.json
 commands/           die Slash-Commands von Claude Code
 hooks/hooks.json    Verdrahtung der Hooks unter Claude Code
+monitors/           der Lauscher als Plugin-Monitor
 antigravity/
   rules/            Dauerregel für Antigravity
-  workflows/        dieselben fünf Befehle als Antigravity-Workflows
+  workflows/        dieselben sechs Befehle als Antigravity-Workflows
 scripts/
   lib/
     channel.py      git, Pfade, Namen, Sperre, Drosselung, Cache
@@ -20,9 +21,14 @@ scripts/
     reservierung.py wer sitzt an welcher Datei
     anfrage.py      Klärung zwischen zwei Sessions
     empfang.py      der Rückkanal in laufende Sessions
+    nachrichten.py  Nachrichten mit @name
+    personen.py     wer zum Team gehört, wen ein Name meint
+    lauschen.py     die Schleife hinter Monitor und 'warten'
   session_start.py       SessionStart-Hook (Claude Code)
-  session_checkpoint.py  Stop-Hook: Zwischenstand und Rückkanal
-  session_end.py         SessionEnd-Hook (Claude Code)
+  prompt_submit.py       UserPromptSubmit-Hook, Rückkanal ohne Netz
+  session_checkpoint.py  Stop-Hook: Rückkanal und Zwischenstand
+  session_end.py         SessionEnd-Hook, löst seine Arbeit ab
+  lauschen.py            Plugin-Monitor, weckt die Session
   antigravity_hook.py    PreInvocation, PostInvocation und Stop
   tool_pre_edit.py       PreToolUse-Hook, warnt vor belegten Dateien
   tool_post_edit.py      PostToolUse-Hook, reserviert beim ersten Zugriff
@@ -50,6 +56,29 @@ Session. Der Pull läuft stattdessen im `Stop`-Hook mit.
 Wird der Hook langsam, fällt das nicht als Fehler auf, sondern nur als
 zähe Session, und dann sucht niemand hier. Deshalb misst
 `test_hook_laeuft_schnell` die Laufzeit mit.
+
+Dieselbe Regel gilt für `prompt_submit.py`, der vor jeder Eingabe
+läuft. Er liest nur den lokalen Stand. Aktuell hält den der Lauscher im
+Hintergrund.
+
+## Texte an das Modell nennen echte Pfade
+
+Was ein Hook an Claude zurückgibt, wird nicht mehr ersetzt.
+`${CLAUDE_PLUGIN_ROOT}` gilt nur in `hooks.json`, in `monitors.json` und
+in den Commands. In einem Hinweistext bleibt die Variable stehen, und in
+Claudes Shell ist sie leer. Bis 0.4 lief dadurch kein einziger Befehl
+aus einem Hinweis. Für solche Texte gibt es `cli_befehl()` in
+`channel.py`, und `test_befehl_aus_dem_hinweis_laeuft_in_einer_shell`
+führt den Befehl tatsächlich aus.
+
+## Tests gegen den echten Betrieb
+
+Die Testumgebung setzt `TEAM_AGENT_NAME` und `CLAUDE_PLUGIN_ROOT`. Im
+Alltag ist beides nicht so: Der Name kommt aus `git config user.name`,
+also meist mit Vor- und Nachnamen, und die Variable fehlt in Claudes
+Shell. Wer etwas an Namen oder Befehlen ändert, testet mit
+`self.team.anzeigenamen` und ohne die Variable, wie in
+`tests/test_live.py`.
 
 ## Zwei Sätze, die das Verhalten bestimmen
 

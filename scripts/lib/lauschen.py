@@ -127,12 +127,19 @@ def _elternprozess_von(pid: int):
 def _lebt(pid: int) -> bool:
     try:
         os.kill(pid, 0)
-        return True
     except ProcessLookupError:
         return False
     except PermissionError:
         # Gibt es, gehört aber jemand anderem. Dann lebt er.
         return True
+    except Exception:
+        return True
+    # Ein beendeter Prozess, den sein Elternprozess noch nicht abgeholt
+    # hat, antwortet auf das Signal, ist aber tot. In der Simulation lief
+    # der Lauscher deshalb weiter, bis die Regie ihre Kinder abräumte.
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+        return stat.rsplit(")", 1)[1].split()[0] != "Z"
     except Exception:
         return True
 

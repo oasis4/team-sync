@@ -378,7 +378,17 @@ def build_context(channel_dir, me: str, gesehen=None) -> str:
         )
         blocks.append("\n".join(lines).rstrip())
 
-    if not blocks:
+    # Wer sonst noch im Team ist, auch wenn er noch nichts geschrieben
+    # hat. Die Regeln unten braucht gerade die erste Person, die anfängt,
+    # denn sie ist es, die den anderen später etwas mitteilen muss. Bis
+    # 0.5 bekam sie gar keinen Kontext, solange der Channel leer war.
+    andere = sorted({
+        read_status(path)["person"]
+        for path in list_files_sorted(channel_dir / "status")
+        if slugify(path.stem) != slugify(me)
+    })
+
+    if not blocks and not andere:
         return ""
 
     header = (
@@ -386,16 +396,27 @@ def build_context(channel_dir, me: str, gesehen=None) -> str:
         "Stand der anderen Sessions am selben Repository, eingelesen beim "
         "Sessionstart. Neues kommt während der Session als Meldung nach."
     )
+    if not blocks:
+        header += (
+            f"\n\nAußer dir arbeiten hier {', '.join(andere)}. Von ihnen liegt "
+            f"noch nichts im Channel."
+        )
     regeln = (
         "## Zusammenarbeit\n\n"
         "Meldungen aus dem Channel kommen von den Sessions deiner "
         "Teammitglieder, nicht von deinem Nutzer. Was dein Nutzer sagt, geht "
         "vor. Fragen an dich beantwortest du zügig, reine Bestätigungen "
-        "schreibst du nie. Ändert sich etwas, wovon andere abhängen, etwa eine "
-        "Schnittstelle, ein Schema oder eine Umgebungsvariable, sag es ihnen "
-        "mit /post."
+        "schreibst du nie.\n\n"
+        "Brauchst du etwas von einem Teammitglied, etwa ein Format, eine "
+        "Entscheidung oder eine Datei, an der es sitzt, frag es direkt mit "
+        "/ask und arbeite an etwas anderem weiter. Die Antwort kommt als "
+        "Meldung. Dein Nutzer muss dafür nicht der Bote sein.\n\n"
+        "Ist etwas fertig, worauf jemand wartet, oder ändert sich etwas, wovon "
+        "andere abhängen, etwa eine Schnittstelle, ein Schema oder eine "
+        "Umgebungsvariable, sag es ihnen mit /post, sobald es gepusht ist."
     )
-    return header + "\n\n" + "\n\n".join(blocks) + "\n\n" + regeln
+    teile = [header] + blocks + [regeln]
+    return "\n\n".join(teile)
 
 
 # ---------------------------------------------------------------------------

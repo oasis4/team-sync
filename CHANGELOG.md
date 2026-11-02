@@ -6,9 +6,10 @@ Versionierung nach [SemVer](https://semver.org/lang/de/).
 ## [0.5.0] — 2026-11-02
 
 Bis hierher hat team-sync im Alltag weniger getan, als die Tests
-behaupteten. Vier Fehler hatten denselben Ursprung: Die Testumgebung
-setzte einen Kurznamen und `CLAUDE_PLUGIN_ROOT`, und beides ist im
-echten Betrieb nicht so. Diese Version behebt sie und übernimmt dazu,
+behaupteten. Die meisten Fehler hatten denselben Ursprung: Die
+Testumgebung setzte einen Kurznamen und `CLAUDE_PLUGIN_ROOT`, und beides
+ist im echten Betrieb nicht so. Zwei weitere zeigten sich erst in einer
+Simulation mit zwei echten Claude-Code-Sitzungen. Diese Version behebt sie und übernimmt dazu,
 was das [Hackathon-Board](https://github.com/azizu06/hackathon-agent-board)
 besser macht: Agenten, die einander Nachrichten schreiben und sich
 gegenseitig wecken.
@@ -35,6 +36,19 @@ gegenseitig wecken.
 - **Antworten auf normale Fragen erreichten den Fragenden nicht.** Der
   Rückkanal kannte nur Antworten auf Dateianfragen. Jetzt kommen alle
   Antworten, während der Session und beim nächsten Start.
+- **Der Hinweis vor einem Edit hat die Rechte umgangen.** Er antwortete
+  mit `permissionDecision: "allow"`. Das überspringt die Rückfrage, ob
+  Claude die Datei bearbeiten darf, ausgerechnet bei Dateien, an denen
+  gerade jemand anders saß. Der Hook greift jetzt nicht mehr in die
+  Rechte ein.
+- **Der Hinweis vor einem Edit kam zu spät.** Ein Begleittext erreicht
+  Claude erst mit dem Ergebnis des Werkzeugs, also nach dem Edit. Jetzt
+  wird der erste Edit an einer belegten Datei einmal angehalten, mit
+  Begründung und dem fertigen Befehl für eine Anfrage. Der nächste
+  Versuch geht durch. Abschaltbar mit `TEAM_SYNC_ANHALTEN=aus`.
+- **Die erste Person im Team bekam keine Regeln.** Solange von den
+  anderen nichts im Channel lag, blieb der Startkontext leer, und damit
+  fehlte genau der Hinweis, den anderen Bescheid zu sagen.
 - Der SessionEnd-Hook las das Feld `session_end_reason`, das es nicht
   gibt. Es heißt `reason`. Ein `/clear` galt deshalb als Sessionende.
 - Gleichzeitige Pulls mehrerer Prozesse konnten sich gegenseitig den
@@ -59,6 +73,13 @@ gegenseitig wecken.
   Stand, ohne Netz.
 - **Verhaltensregeln in jeder Meldung**, übernommen vom Board: zügig
   antworten, nie nur bestätigen, der eigene Mensch geht vor.
+- **Teammitglieder direkt fragen.** Im Startkontext steht jetzt, dass
+  Claude bei Bedarf das Teammitglied mit /ask fragt, statt den eigenen
+  Nutzer als Boten zu benutzen. In der Simulation hat Claude genau das
+  sonst getan.
+- **`tests/szenario.py`** spielt einen ganzen Ablauf zweier Sitzungen
+  durch, mit echten Hooks, echten Lauschern und echtem Remote, und
+  misst, wie lange jede Meldung braucht.
 - `team_sync.py nachrichten` listet die letzten Nachrichten,
   `/team` zeigt sie ebenfalls.
 - Fragen an `alle` gehen an das ganze Team.
@@ -80,6 +101,9 @@ gegenseitig wecken.
 
 ### Bekannte Grenzen
 
+- Bei `/exit` fragt Claude Code einmal nach, weil der Lauscher als
+  Hintergrundarbeit zählt. Enter bestätigt. Aus einem Plugin heraus
+  lässt sich das nicht abstellen.
 - Jede Meldung des Lauschers ist ein Modellaufruf auf dem Kontingent
   der Person, die sie bekommt. Gemeldet wird deshalb nur, was an sie
   oder an alle geht, und jede Sache nur einmal.

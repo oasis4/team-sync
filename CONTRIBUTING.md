@@ -80,12 +80,28 @@ Shell. Wer etwas an Namen oder Befehlen ändert, testet mit
 `self.team.anzeigenamen` und ohne die Variable, wie in
 `tests/test_live.py`.
 
+## Das Szenario
+
+`tests/szenario.py` spielt einen ganzen Ablauf zweier Sitzungen durch:
+Reservierung, angehaltener Edit, Anfrage, Weckruf, Antwort, Nachricht,
+Sessionende. Wer an Hooks, Lauscher oder Meldungstexten etwas ändert,
+lässt es laufen. Es zeigt Fehler, die einzelne Tests nicht sehen, weil
+ein Schritt nur gelingt, wenn der davor wirklich bei der anderen
+Sitzung angekommen ist.
+
 ## Zwei Sätze, die das Verhalten bestimmen
 
-**Der Hook blockiert nie.** `permissionDecision` ist immer `allow`, die
-Meldung geht über `additionalContext`. Verweigern wäre der sichere Weg
-gegen doppelte Arbeit, aber ein Fehlalarm bremst eine autonome Session
-stundenlang, ohne dass es jemand merkt.
+**Der Hook hält höchstens einmal an.** Sitzt jemand auf demselben
+Branch an der Datei, wird der erste Edit einmal mit `deny` und einer
+Begründung angehalten, jeder weitere geht durch. Nur so erreicht die
+Warnung Claude vor dem Edit, denn `additionalContext` kommt erst mit dem
+Ergebnis des Werkzeugs an. Öfter anzuhalten wäre falsch: Ein Hook, der
+immer wieder verweigert, bremst eine autonome Session stundenlang, ohne
+dass es jemand merkt.
+
+**Der Hook gibt nie `allow` zurück.** Das überspringt die Rückfrage, ob
+Claude die Datei bearbeiten darf, und hebelt damit die Einstellungen
+des Nutzers aus. Bis 0.5 war genau das so.
 
 **Warten heißt nie Blockieren.** Wer auf eine belegte Datei stößt, legt
 eine Anfrage ab und arbeitet weiter. Jede Meldung, die zum Warten

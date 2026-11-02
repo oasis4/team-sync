@@ -421,10 +421,17 @@ def melde_kontext(host: str, ereignis: str, text: str):
 
 def melde_werkzeug_hinweis(host: str, text: str, project_dir=None):
     """
-    Hinweis vor einem Werkzeugaufruf.
+    Hinweis vor einem Werkzeugaufruf, ohne in die Rechte einzugreifen.
 
-    Unter Claude Code ist das eine Erlaubnis mit Begleittext in einem
-    Zug. Antigravity erwartet an dieser Stelle laut Protokoll genau
+    Unter Claude Code ist das nur Begleittext. Bis 0.5 stand hier
+    zusätzlich permissionDecision "allow", gedacht als "wir blockieren
+    nie". Tatsächlich überspringt "allow" aber die Rückfrage, ob Claude
+    die Datei bearbeiten darf. Ausgerechnet bei Dateien, an denen gerade
+    jemand anders saß, hat das Plugin damit die Freigabe des Nutzers
+    umgangen. Ohne Entscheidung bleibt alles, wie der Nutzer es
+    eingestellt hat.
+
+    Antigravity erwartet an dieser Stelle laut Protokoll genau
     {"decision": "allow"}; ein zusätzliches Feld kann der strenge
     Parser ablehnen, und eine abgelehnte Hook-Antwort hat schon dazu
     geführt, dass jeder Werkzeugaufruf verweigert wurde. Der Hinweis
@@ -442,8 +449,38 @@ def melde_werkzeug_hinweis(host: str, text: str, project_dir=None):
         {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
-                "permissionDecision": "allow",
                 "additionalContext": text,
+            }
+        }
+    )
+
+
+def halte_an(host: str, grund: str, project_dir=None):
+    """
+    Hält einen Werkzeugaufruf einmal an und sagt Claude, warum.
+
+    Ein Hinweis als Begleittext kommt bei Claude erst zusammen mit dem
+    Ergebnis des Werkzeugs an, also nach dem Edit. Gegen doppelte Arbeit
+    hilft er dann nicht mehr. Ein abgelehnter Aufruf dagegen erreicht
+    Claude vorher, und Claude arbeitet mit der Begründung weiter.
+
+    Der Aufrufer sorgt dafür, dass das pro Datei nur einmal geschieht.
+    Ein zweiter Versuch geht durch, damit keine Sitzung hängen bleibt.
+
+    Unter Antigravity bleibt es beim zurückgestellten Hinweis. Ob der
+    dortige Parser eine Ablehnung mit Begründung annimmt, ist nicht
+    festgeschrieben, und ein Fehler hier könnte jeden Aufruf blockieren.
+    """
+    if host == ANTIGRAVITY:
+        melde_werkzeug_hinweis(host, grund, project_dir)
+        return
+
+    _ausgeben(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": grund,
             }
         }
     )

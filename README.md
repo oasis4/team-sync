@@ -61,7 +61,9 @@ und die zuletzt getroffenen Entscheidungen.
 - **Vor jeder Eingabe** kommt dazu, was seit dem letzten Blick neu ist,
   ohne Netzwerkzugriff und damit ohne Wartezeit.
 - **Vor jedem Edit** wird geprüft, ob gerade jemand anders an derselben
-  Datei sitzt. Wenn ja, gibt es einen Hinweis. Blockiert wird nie.
+  Datei sitzt. Wenn ja, wird der erste Edit einmal angehalten, mit dem
+  fertigen Befehl für eine Anfrage. Wiederholt Claude ihn, geht er
+  durch.
 - **Beim ersten Zugriff** auf eine Datei wird sie für dich reserviert,
   damit die anderen dasselbe sehen.
 - **Alle zehn Minuten** wird dein Stand geschrieben, im Hintergrund,
@@ -113,7 +115,8 @@ niemand:
 ```
 14:32  Session A fasst auth.py an → Reservierung
 14:51  Session B will an dieselbe Datei
-       → Hinweis, B legt eine Anfrage ab und macht mit etwas anderem weiter
+       → der Edit wird einmal angehalten, B legt eine Anfrage ab
+         und macht mit etwas anderem weiter
 14:53  A sieht die Anfrage und antwortet: "Ich bin nur in verify_token"
 14:56  B sieht die Antwort und arbeitet an der richtigen Stelle weiter
 ```
@@ -346,6 +349,7 @@ Alles optional, per Umgebungsvariable:
 | `TEAM_SYNC_LAUSCHEN_START` | `20` | Sekunden bis zum ersten Blick, damit er nicht wiederholt, was der Sessionstart zeigt |
 | `TEAM_SYNC_EMPFANG_SECONDS` | `120` | Wie oft der Stop-Hook selbst zieht, wenn kein Lauscher läuft |
 | `TEAM_SYNC_RESERVIERUNG_STUNDEN` | `4` | Wie lange eine Reservierung gilt |
+| `TEAM_SYNC_ANHALTEN` | an | Auf `aus` gesetzt wird ein Edit an einer belegten Datei nie angehalten, es gibt nur den Hinweis, der dann aber erst nach dem Edit ankommt |
 | `TEAM_SYNC_ANFRAGE_TIMEOUT` | `10` | Minuten, bis eine unbeantwortete Anfrage aufgegeben wird |
 | `TEAM_SYNC_ANFRAGE_SPERRE` | `60` | Minuten, bis zu derselben Datei erneut gefragt werden darf |
 | `TEAM_SYNC_CHANNEL_DIR` | Worktree bzw. `<projekt>-channel` | Anderer Ort für den Channel |
@@ -390,10 +394,18 @@ meldet er nur, was an dich oder an alle geht, nie Statusänderungen der
 anderen, und jede Sache nur einmal. Wer das trotzdem nicht will, setzt
 `TEAM_SYNC_LAUSCHEN=aus`.
 
-**Kein Blockieren.** Der Hinweis vor einem Edit verweigert nichts, er
-informiert. Ein Hook, der zu oft verweigert, bringt eine autonom laufende
-Session stundenlang unbemerkt zum Stehen. Das wäre schlimmer als die
-doppelte Arbeit, die er verhindern soll.
+**Kein Blockieren.** Ein Edit an einer belegten Datei wird höchstens
+einmal angehalten, der nächste Versuch geht durch. Einmal ist nötig,
+weil ein bloßer Hinweis bei Claude erst nach dem Edit ankäme. Öfter wäre
+falsch, denn ein Hook, der immer wieder verweigert, bringt eine autonom
+laufende Session stundenlang unbemerkt zum Stehen. In die Rechte greift
+der Hook nie ein, ob Claude eine Datei bearbeiten darf, bestimmen
+weiterhin deine Einstellungen.
+
+**Beim Beenden fragt Claude Code einmal nach.** Der Lauscher zählt als
+Hintergrundarbeit. Bei `/exit` erscheint deshalb ein Dialog, ob sie
+beendet werden soll. Enter bestätigt, danach läuft der Abschluss wie
+gewohnt. Das lässt sich aus einem Plugin heraus nicht abstellen.
 
 **Keine KI-Zusammenfassung im Hintergrund.** Der automatische Status wird
 aus dem Transkript zusammengesetzt, ohne zusätzlichen Modellaufruf. Jede
@@ -440,6 +452,14 @@ Fehlerberichte und Vorschläge gerne als Issue. Zum Entwickeln siehe
 
 ```bash
 python3 -m unittest discover -s tests -t tests
+```
+
+Wer sehen will, wie zwei Sitzungen sich über das Plugin abstimmen,
+lässt das Szenario laufen. Es nutzt dieselben Hooks und Lauscher wie
+Claude Code, gegen ein Wegwerf-Remote, und gibt eine Zeitleiste aus:
+
+```bash
+python3 tests/szenario.py
 ```
 
 ## Lizenz

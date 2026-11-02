@@ -3,11 +3,18 @@
 PreToolUse-Hook: warnt vor einer Datei, an der gerade jemand anders
 sitzt.
 
-Blockiert nie. Die Entscheidung bleibt beim Agenten, der Hook liefert
-nur die Information und eine klare Handlungsanweisung. Ein Hook, der zu
-oft verweigert, bringt eine Auto-Session stundenlang unbemerkt zum
-Stehen, und das wäre schlimmer als die doppelte Arbeit, die er
-verhindern soll.
+Blockiert nie dauerhaft. Sitzt jemand auf demselben Branch an der
+Datei, wird nur der erste Edit einmal angehalten, mit Begründung und
+dem fertigen Befehl für eine Anfrage. Der nächste Versuch geht durch.
+Bis 0.5 gab es nur einen Begleittext, und der kommt bei Claude erst mit
+dem Ergebnis des Werkzeugs an, also nach dem Edit. Gegen doppelte
+Arbeit half er damit nicht. Ein Hook, der immer wieder verweigert,
+brächte dagegen eine autonome Session unbemerkt zum Stehen, deshalb
+genau einmal und nie öfter.
+
+In die Rechte greift der Hook nicht ein. Er gibt nie "allow" zurück,
+denn das würde die Rückfrage überspringen, ob Claude die Datei
+überhaupt bearbeiten darf.
 
 Dieses Skript läuft vor JEDEM Edit. Deshalb gilt hier eine Regel, die
 sonst nirgends im Plugin gilt:
@@ -23,10 +30,16 @@ Läuft unter Claude Code und unter Antigravity. Der Unterschied steckt
 in lib/host.py, hier ist nur noch die Sachlogik.
 """
 
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+# Auf "aus" gesetzt, wird nie angehalten, nur hingewiesen.
+ANHALTEN = (os.environ.get("TEAM_SYNC_ANHALTEN") or "").strip().lower() not in (
+    "0", "aus", "off", "nein", "no", "false",
+)
 
 # Modi, in denen niemand mitliest und der Agent allein entscheidet.
 AUTONOME_MODI = {"auto", "bypassPermissions", "dontAsk", "acceptEdits"}
@@ -126,15 +139,33 @@ def main():
         "anderen Punkt weiter, nicht warten, das kostet nur Zeit:\n\n"
         f'    {_cli_aufruf(daten.host)} anfrage '
         f'--datei "{datei}" --text "<was du vorhast>"\n\n'
-        "Komm später auf diese Datei zurück."
+        "Die Antwort kommt als Meldung. Komm dann auf diese Datei zurück."
     )
     if not autonom:
         anweisung += " Oder frag den Nutzer, ob ihr euch kurz abstimmt."
 
-    melde(
+    kopf = (
         f"team-sync: **`{datei}` ist belegt.** "
         f"{reservierung.beschreibe(eintrag)}, derselbe Branch wie deiner.\n\n"
-        f"Betrifft dein Vorhaben denselben Abschnitt, entsteht hier doppelte "
+    )
+
+    if ANHALTEN and not anfrage.angehalten_kuerzlich(project_dir, datei):
+        if anfrage.merke_angehalten(project_dir, datei):
+            host.halte_an(
+                daten.host,
+                kopf
+                + "Dieser Edit wurde deshalb einmal angehalten, die Datei ist "
+                "unverändert. Betrifft dein Vorhaben denselben Abschnitt, "
+                f"entsteht hier doppelte Arbeit. {anweisung}\n\n"
+                "Betrifft es einen anderen Abschnitt oder musst du jetzt sofort "
+                "an die Datei, wiederhole den Edit einfach. Er geht dann durch.",
+                project_dir,
+            )
+            return
+
+    melde(
+        kopf
+        + f"Betrifft dein Vorhaben denselben Abschnitt, entsteht hier doppelte "
         f"Arbeit. {anweisung}"
     )
 

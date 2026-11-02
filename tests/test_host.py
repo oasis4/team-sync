@@ -214,12 +214,26 @@ class TestAusgabeformat(unittest.TestCase):
         )
         self.assertEqual(daten, {"injectSteps": [{"ephemeralMessage": "hallo"}]})
 
-    def test_claude_werkzeughinweis_erlaubt_und_meldet(self):
+    def test_claude_werkzeughinweis_greift_nicht_in_die_rechte_ein(self):
+        """
+        "allow" überspringt die Rückfrage, ob Claude die Datei bearbeiten
+        darf. Ein Hinweis darf die Einstellungen des Nutzers nie umgehen.
+        """
         daten = self._fange(
             lambda: host.melde_werkzeug_hinweis(host.CLAUDE, "belegt", None)
         )
-        self.assertEqual(daten["hookSpecificOutput"]["permissionDecision"], "allow")
+        self.assertNotIn("permissionDecision", daten["hookSpecificOutput"])
         self.assertEqual(daten["hookSpecificOutput"]["additionalContext"], "belegt")
+
+    def test_claude_anhalten_mit_begruendung(self):
+        daten = self._fange(lambda: host.halte_an(host.CLAUDE, "belegt", None))
+        ausgabe = daten["hookSpecificOutput"]
+        self.assertEqual(ausgabe["permissionDecision"], "deny")
+        self.assertEqual(ausgabe["permissionDecisionReason"], "belegt")
+
+    def test_antigravity_wird_nie_angehalten(self):
+        daten = self._fange(lambda: host.halte_an(host.ANTIGRAVITY, "belegt", None))
+        self.assertEqual(daten, {"decision": "allow"})
 
     def test_antigravity_werkzeughinweis_ist_nur_eine_erlaubnis(self):
         """
@@ -328,7 +342,9 @@ class TestGemischtesTeam(TeamTestCase):
             },
         )
         self.assertErfolg(antwort, "PreToolUse unter Claude Code")
-        hinweis = json.loads(antwort.stdout)["hookSpecificOutput"]["additionalContext"]
+        ausgabe = json.loads(antwort.stdout)["hookSpecificOutput"]
+        # Der erste Edit wird angehalten, der Hinweis steht in der Begründung.
+        hinweis = ausgabe.get("additionalContext") or ausgabe.get("permissionDecisionReason")
         self.assertIn("auth.py", hinweis)
         self.assertIn("anna", hinweis)
 

@@ -284,9 +284,18 @@ class TestHooks(TeamTestCase):
         self.assertEqual(ergebnis.stdout.strip(), "")
 
     def test_sessionstart_bei_leerem_channel(self):
+        """
+        Noch hat niemand etwas geschrieben. Die erste Person braucht
+        trotzdem die Regeln zur Zusammenarbeit, denn sie ist es, die den
+        anderen später etwas mitteilen muss. Mehr kommt nicht.
+        """
         ergebnis = self.team.hook("Lars", "session_start.py", {})
         self.assertErfolg(ergebnis)
-        self.assertEqual(ergebnis.stdout.strip(), "")
+        text = json.loads(ergebnis.stdout)["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("Zusammenarbeit", text)
+        self.assertIn("max", text)
+        for block in ("Offene Fragen", "Woran die anderen", "Entscheidungen", "Nachrichten"):
+            self.assertNotIn(block, text)
 
     def test_sessionende_schreibt_status_aus_transkript(self):
         transkript = self.team.transkript_schreiben("Lars", [

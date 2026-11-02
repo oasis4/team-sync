@@ -223,6 +223,53 @@ def schon_gefragt(project_dir: Path, datei: str) -> bool:
     return datetime.now() - zeitpunkt < timedelta(minutes=SPERRE_MINUTEN)
 
 
+def _angehalten_pfad(project_dir: Path):
+    git_dir = get_git_dir(project_dir)
+    return (git_dir / "team-sync-angehalten.json") if git_dir else None
+
+
+def angehalten_kuerzlich(project_dir: Path, datei: str) -> bool:
+    """
+    Wurde ein Edit an dieser Datei vor Kurzem schon einmal angehalten?
+
+    Dann geht der nächste durch. Der Stopp ist ein Hinweis zur rechten
+    Zeit, keine Sperre, und eine Sitzung darf an ihm nie hängen bleiben.
+    """
+    pfad = _angehalten_pfad(project_dir)
+    if pfad is None or not pfad.exists():
+        return False
+    try:
+        daten = json.loads(pfad.read_text(encoding="utf-8"))
+        zeitpunkt = parse_stamp(daten.get(datei, "")) if isinstance(daten, dict) else None
+    except Exception:
+        return True
+    if zeitpunkt is None:
+        return False
+    return datetime.now() - zeitpunkt < timedelta(minutes=SPERRE_MINUTEN)
+
+
+def merke_angehalten(project_dir: Path, datei: str) -> bool:
+    """
+    Merkt sich den Stopp. Gibt False zurück, wenn das nicht ging.
+
+    Ohne Merkzettel würde jeder Versuch angehalten, und genau das darf
+    nicht passieren. Kann er nicht geschrieben werden, hält der Hook
+    deshalb gar nicht erst an.
+    """
+    pfad = _angehalten_pfad(project_dir)
+    if pfad is None:
+        return False
+    try:
+        daten = json.loads(pfad.read_text(encoding="utf-8")) if pfad.exists() else {}
+        if not isinstance(daten, dict):
+            daten = {}
+        daten[datei] = now_stamp()
+        pfad.write_text(json.dumps(daten), encoding="utf-8")
+        return True
+    except Exception:
+        return False
+
+
 def merke_gefragt(project_dir: Path, datei: str):
     pfad = _marker_pfad(project_dir)
     if pfad is None:

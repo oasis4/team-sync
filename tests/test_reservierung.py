@@ -76,6 +76,11 @@ class ReservierungsTestCase(TeamTestCase):
             return ""
         return json.loads(ergebnis.stdout)["hookSpecificOutput"]["additionalContext"]
 
+    @staticmethod
+    def text(ausgabe):
+        """Der Hinweis, egal ob als Begleittext oder als Begründung eines Stopps."""
+        return ausgabe.get("additionalContext") or ausgabe.get("permissionDecisionReason") or ""
+
     def reservierungsdatei(self, person, besitzer):
         return self.team.channels[person] / "reservierungen" / f"{besitzer}.md"
 
@@ -144,19 +149,50 @@ class TestWarnung(ReservierungsTestCase):
 
         ausgabe = self.pre_edit("Max", "src/auth.py")
         self.assertIsNotNone(ausgabe, "Max bekam keine Warnung")
-        self.assertIn("src/auth.py", ausgabe["additionalContext"])
-        self.assertIn("lars", ausgabe["additionalContext"].lower())
+        self.assertIn("src/auth.py", self.text(ausgabe))
+        self.assertIn("lars", self.text(ausgabe).lower())
 
-    def test_warnung_blockiert_niemals(self):
+    def test_erster_edit_wird_einmal_angehalten_dann_nie_wieder(self):
         """
-        Ein Hook, der verweigert, bringt eine Auto-Session unbemerkt zum
-        Stehen. Das wäre schlimmer als die doppelte Arbeit.
+        Ein Begleittext kommt erst nach dem Edit bei Claude an. Deshalb
+        wird der erste Edit einmal angehalten. Jeder weitere geht durch,
+        sonst bliebe eine autonome Session an dieser Datei hängen.
         """
         self.post_edit("Lars", "src/auth.py")
         self.team.cli("Max", "uebersicht")
 
-        ausgabe = self.pre_edit("Max", "src/auth.py")
-        self.assertEqual(ausgabe["permissionDecision"], "allow")
+        erster = self.pre_edit("Max", "src/auth.py", modus="auto")
+        self.assertEqual(erster["permissionDecision"], "deny")
+        self.assertIn("wiederhole den Edit", erster["permissionDecisionReason"])
+
+        for _ in range(3):
+            weiterer = self.pre_edit("Max", "src/auth.py", modus="auto")
+            self.assertNotIn("permissionDecision", weiterer)
+            self.assertIn("ist belegt", weiterer["additionalContext"])
+
+    def test_hinweis_erlaubt_nie_von_sich_aus(self):
+        """
+        "allow" würde die Rückfrage überspringen, ob Claude die Datei
+        bearbeiten darf. Das war bis 0.5 so.
+        """
+        self.post_edit("Lars", "src/auth.py")
+        self.team.cli("Max", "uebersicht")
+        for _ in range(2):
+            ausgabe = self.pre_edit("Max", "src/auth.py")
+            self.assertNotEqual(ausgabe.get("permissionDecision"), "allow")
+
+    def test_anhalten_abschaltbar(self):
+        self.post_edit("Lars", "src/auth.py")
+        self.team.cli("Max", "uebersicht")
+        ausgabe = self.pre_edit("Max", "src/auth.py", extra={"TEAM_SYNC_ANHALTEN": "aus"})
+        self.assertNotIn("permissionDecision", ausgabe)
+        self.assertIn("ist belegt", ausgabe["additionalContext"])
+
+    def test_anderer_branch_haelt_nicht_an(self):
+        self.post_edit("Lars", "src/auth.py")
+        git(["checkout", "-q", "-b", "feature/x"], cwd=self.team.projekte["Max"])
+        self.team.cli("Max", "uebersicht")
+        self.assertNotIn("permissionDecision", self.pre_edit("Max", "src/auth.py"))
 
     def test_anderer_branch_nur_knapper_hinweis(self):
         """
@@ -176,7 +212,7 @@ class TestWarnung(ReservierungsTestCase):
         self.post_edit("Lars", "src/auth.py")
         self.team.cli("Max", "uebersicht")
 
-        text = self.pre_edit("Max", "src/auth.py", modus="auto")["additionalContext"]
+        text = self.text(self.pre_edit("Max", "src/auth.py", modus="auto"))
         self.assertIn("ist belegt", text)
         self.assertIn("anfrage", text)
         self.assertIn("anderen Punkt weiter", text)

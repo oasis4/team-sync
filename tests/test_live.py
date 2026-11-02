@@ -138,6 +138,17 @@ class TestNamen(LiveTestCase):
         self.assertEqual(json.loads(self.team.cli("Lars", "fragen", "--json").stdout), [])
 
 
+class TestAllein(TeamTestCase):
+    personen = ("Lars",)
+
+    def test_sessionstart_allein_im_channel_bleibt_still(self):
+        """Ohne Teammitglieder gibt es niemanden, mit dem man sich abstimmt."""
+        self.setup_alle()
+        ergebnis = self.team.hook("Lars", "session_start.py", {})
+        self.assertErfolg(ergebnis)
+        self.assertEqual(ergebnis.stdout.strip(), "")
+
+
 class TestNamensvergleich(unittest.TestCase):
     def test_namensteile(self):
         self.assertTrue(frontmatter.matches_person("max", "max-mustermann"))
@@ -283,7 +294,11 @@ class TestBefehleImText(LiveTestCase):
             "tool_input": {"file_path": str(ziel)},
         }
         ergebnis = self.team.hook("Max", "tool_pre_edit.py", payload)
-        return json.loads(ergebnis.stdout)["hookSpecificOutput"]["additionalContext"]
+        # Der erste Edit wird angehalten, der Hinweis steht dann in der
+        # Begründung, die Claude vor dem Edit zu sehen bekommt.
+        ausgabe = json.loads(ergebnis.stdout)["hookSpecificOutput"]
+        self.assertEqual(ausgabe.get("permissionDecision"), "deny")
+        return ausgabe["permissionDecisionReason"]
 
     def test_hinweis_nennt_den_echten_pfad(self):
         """
